@@ -21,7 +21,7 @@ cli_tools:
     timeout: 10s
     allowed_commands: ["git"]
     param_patterns:
-      repo_path: "^[a-zA-Z0-9_/.: -]+$"
+      repo_path: "^[a-zA-Z0-9_/.~: -]+$"
 
   - id: "cli.file.search"
     name: "文件搜索"
@@ -31,8 +31,8 @@ cli_tools:
     timeout: 10s
     allowed_commands: ["find"]
     param_patterns:
-      directory: "^[a-zA-Z0-9_/.: -]+$"
-      pattern: "^[a-zA-Z0-9_./* -]+$"
+      directory: "^[a-zA-Z0-9_/.~: -]+$"
+      pattern: "^[a-zA-Z0-9_./*~ -]+$"
 """
 
 _VIRTUAL = {"name": "run_workflow", "title": "运行工作流", "description": "工作流编排",

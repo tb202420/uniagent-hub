@@ -9,7 +9,7 @@ from core.guard.validation import validate_args, DEFAULT_ARG_PATTERN
 SCHEMA = {
     "type": "object",
     "properties": {
-        "directory": {"type": "string", "pattern": "^[a-zA-Z0-9_/.:\\\\ -]+$"},
+        "directory": {"type": "string", "pattern": "^[a-zA-Z0-9_/.~:\\\\ -]+$"},
         "pattern": {"type": "string"},
         "limit": {"type": "integer"},
         "mode": {"type": "string", "enum": ["fast", "full"]},

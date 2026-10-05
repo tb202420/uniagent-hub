@@ -14,7 +14,7 @@ cli_tools:
     timeout: 10s
     allowed_commands: ["git"]
     param_patterns:
-      repo_path: "^[a-zA-Z0-9_/.: -]+$"
+      repo_path: "^[a-zA-Z0-9_/.~: -]+$"
 
   - id: "cli.file.search"
     name: "文件搜索"
@@ -28,12 +28,12 @@ cli_tools:
         command: "find {directory # 搜索目录} -name '{pattern # 文件名模式，支持 * 通配}' -type f"
         allowed_commands: ["find"]
         param_patterns:
-          directory: "^[a-zA-Z0-9_/.: -]+$"
-          pattern: "^[a-zA-Z0-9_./* -]+$"
+          directory: "^[a-zA-Z0-9_/.~: -]+$"
+          pattern: "^[a-zA-Z0-9_./*~ -]+$"
       windows:
         description: "在指定目录搜索匹配文件名的文件（Windows：where /r）"
         command: "where /r {directory # 搜索目录} {pattern # 文件名模式，支持 * 通配}"
         allowed_commands: ["where"]
         param_patterns:
-          directory: "^[a-zA-Z0-9_/.:\\ -]+$"
-          pattern: "^[a-zA-Z0-9_./* -]+$"
+          directory: "^[a-zA-Z0-9_/.~:\\ -]+$"
+          pattern: "^[a-zA-Z0-9_./*~ -]+$"

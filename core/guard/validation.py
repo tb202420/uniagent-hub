@@ -10,9 +10,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
-# 默认注入防护白名单：仅允许安全字符集（含 Windows 盘符冒号）。
+# 默认注入防护白名单：仅允许安全字符集（含 Windows 盘符冒号与 8.3 短路径的 ~）。
 # 显式排除 ; & | ` $ ( ) < > " ' \ 换行 等 shell 元字符。
-DEFAULT_ARG_PATTERN = r"^[a-zA-Z0-9_/.:\- *]+$"
+DEFAULT_ARG_PATTERN = r"^[a-zA-Z0-9_/.:\- *~]+$"
 _PATTERN_CACHE: dict[str, re.Pattern] = {}
 
 
