@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# 统一 UTF-8：Windows runner 默认 locale 为 cp1252，Python 子进程打印中文会崩溃
+env:
+  PYTHONUTF8: "1"
+
 jobs:
   test:
     strategy:
@@ -22,4 +26,18 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Run tests
-        run: pytest -q
+        run: pytest --junitxml=pytest-results.xml
+      - name: Annotate test failures
+        if: failure()
+        shell: pwsh
+        run: |
+          if (-not (Test-Path pytest-results.xml)) { exit 0 }
+          [xml]$doc = Get-Content pytest-results.xml
+          foreach ($tc in $doc.DocumentElement.SelectNodes("//testcase")) {
+            $f = $tc.SelectSingleNode("failure")
+            if ($f) {
+              $msg = ($f.GetAttribute("message") -replace "\s+", " ")
+              if ($msg.Length -gt 250) { $msg = $msg.Substring(0, 250) }
+              Write-Output ("::error file=" + $tc.GetAttribute("file") + "::FAILED " + $tc.GetAttribute("classname") + "::" + $msg)
+            }
+          }

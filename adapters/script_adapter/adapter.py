@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -133,9 +134,13 @@ class ScriptAdapter:
         cmd = [interpreter, str(ep_resolved), *argv]
 
         try:
-            # 同 CLI 适配器：errors="replace" 避免子进程非 UTF-8 输出导致解码崩溃
+            # 子进程是平台自带 Python 脚本：显式 UTF-8 管道——经 PYTHONIOENCODING
+            # 让子进程以 UTF-8 编码输出、父进程按 UTF-8 解码，避免宿主 locale
+            # （如 Windows runner 的 cp1252）下 print 中文即 UnicodeEncodeError
+            child_env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
             proc = subprocess.run(
-                cmd, shell=False, capture_output=True, text=True, errors="replace",
+                cmd, shell=False, capture_output=True,
+                encoding="utf-8", errors="replace", env=child_env,
                 timeout=spec.constraints.timeout_seconds(), cwd=str(root),
             )
         except subprocess.TimeoutExpired:
