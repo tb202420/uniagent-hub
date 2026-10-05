@@ -1,0 +1,14 @@
+# UniAgent Hub 运行时依赖（Python 3.12+，实测 3.14）
+# 版本锁定（ERR-09）：复现性优先，比赛演示环境与开发环境完全一致
+# 开发 / 测试 / 文档辅助依赖见 requirements-dev.txt（T-3 依赖分层）
+fastapi==0.141.1
+uvicorn==0.54.0
+pydantic==2.13.5
+PyYAML==6.0.3
+paho-mqtt==2.1.0
+httpx==0.28.1
+# FastMCP 4 协议前端（python main.py --gateway fastmcp；自研网关为默认与回退路径）
+# 附带依赖：mcp / jsonschema / PyJWT 等（纯增量，不降级上述锁定版本）
+fastmcp==4.0.10
+# Ed25519 工具清单签名（HUB_ATTESTATION_KEY；见 core/guard/attestation.py）
+cryptography==50.0.2

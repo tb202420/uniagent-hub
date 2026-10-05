@@ -1,0 +1,20 @@
+# 开发 / 测试 / 文档辅助依赖（T-3 依赖分层）
+# 安装：pip install -r requirements-dev.txt（已含运行时依赖）
+
+-r requirements.txt
+
+# 测试
+pytest==9.1.1
+pytest-cov==7.1.0
+
+# 可选：断网降级演示用的本地 MQTT broker（scripts/dev_mqtt_broker.py）
+# 在线演示（公共 broker / EMQX）无需安装；未安装时 -Offline 模式不可用
+amqtt==0.12.1
+
+# 可选：研究报告 Word 导出与图件生成（scripts/md_to_docx.py、scripts/make_report_figures.py）
+# 仅生成文档时需要，运行 Hub / 演示 / 测试均不依赖
+python-docx==1.2.0
+matplotlib==3.11.2
+
+# 可选：硬件测试 1（USB 摄像头，adapters/script_adapter/scripts/camera_capture.py）
+# opencv-python==5.0.0   # 本机实测版本（注释锁定，供硬件测试阶段安装）

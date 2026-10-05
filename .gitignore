@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 运行数据
+*.db
+*.sqlite3
+data/
+logs/
+
+# 环境与 IDE
+.env
+.idea/
+.vscode/
+*.local
+node_modules/
+
+# 演示产物
+reports/
+*.mp4
+*.ppt
+*.pptx
+
+# Office 临时文件
+~$*
+
+# PlatformIO 构建产物
+.pio/
+
+# 比赛原始材料（扫描件 7MB+，不入库；提交材料时单独整理）
+比赛材料/
+
+# 比赛材料类文件（研究报告/申报书/查新/答辩PPT 等；会随盖章/查重反复修改，不入库，仅工作区保留）
+*.docx
+
+# 比赛材料生成脚本（含个人信息：姓名/学校/教师，开源不入库；本地保留用于材料再生成）
+scripts/build_ppt.js
+scripts/md_to_docx.py
+scripts/make_submission_docs.py
+
+# ---- 开源公开版排除（public-main 分支；本地工作文件与内部记录不入公开库）----
+.zcodeignore
+上下文迁移总结.txt
+项目改进方案/
+docs/研究报告.md
+docs/PlatformIO 创建项目时所遇问题修复过程.txt
+比赛材料总结.txt
+LLM 接入评估与阶段 4 修正规划.txt

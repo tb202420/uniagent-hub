@@ -1,0 +1,33 @@
+# 数据库适配器配置（B9：第五类适配器，SQLite 演示库）
+# 与 Hub 自身的 data/uniagent.db 完全隔离，写错也只影响演示库。
+database:
+  engine: sqlite
+  db_path: data/uniagent_demo.db
+
+  # 首次启动自动建表 + 播种（表已存在则跳过）
+  seed:
+    table: meeting_rooms
+    ddl: >-
+      CREATE TABLE IF NOT EXISTS meeting_rooms (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        temperature REAL NOT NULL,
+        status TEXT NOT NULL
+      )
+    rows:
+      - [Room301, 31.0, hot]
+      - [Room302, 26.0, ok]
+      - [Room303, 24.0, ok]
+
+  # 两个能力：只读查询 + 受限写（动词白名单 + 单语句 + 禁止注释）
+  tools:
+    - name: db_query
+      description: "只读查询演示数据库（仅允许 SELECT 单语句，会议室台账表 meeting_rooms）"
+      readOnly: true
+      permissionLevel: read
+      rateLimit: 20/m
+    - name: db_execute
+      description: "对演示数据库执行受限写操作（INSERT/UPDATE/DELETE 单语句，需 write 权限）"
+      readOnly: false
+      permissionLevel: write
+      rateLimit: 5/m

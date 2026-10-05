@@ -1,0 +1,93 @@
+ESP32 温室节点「模拟器」端到端验证证据
+================================================================
+日期：2026-10-04
+结论：全面改用 Python MQTT 模拟器替代真实 ESP32 硬件，功能链路完全打通。
+被测组件：
+  - 设备模拟器 adapters/mqtt_adapter/sim_esp32_greenhouse.py
+  - 工作流 core/workflow/workflows_hardware.yaml::smart_irrigation
+  - 网关：python main.py --port 8020（硬件档）
+  - Broker：本地 amqtt（scripts/dev_mqtt_broker --port 1883）
+
+复用说明：本项目自阶段 1 起即以 Python MQTT 模拟器验证协议链路
+（simulator.py / sim_ac.py），本次将同一范式扩展到温室灌溉节点，
+设备端发布 UniSpec(retain) 即被自动发现，平台核心代码 0 行修改。
+
+----------------------------------------------------------------
+一、自动发现（模拟器上电 → 工具在平台可见）
+----------------------------------------------------------------
+方法：Hub /healthz 的 tools 计数由 7 变为 10（新增 3 个温室工具）
+实测：0.23s
+（真机时代原记录为 8.6s，差异来自真机需建立 Wi-Fi 连接）
+
+----------------------------------------------------------------
+二、smart_irrigation 工作流闭环（3 次，均成功）
+----------------------------------------------------------------
+命令：
+  python -m scripts.hardware_probe call --url http://127.0.0.1:8020 \
+      --tool run_workflow --args "{\"workflow\":\"smart_irrigation\"}" --permission write
+
+第 1 次：总耗时 1.29s   control_pump 写回执 100ms
+第 2 次：总耗时 1.29s   control_pump 写回执 100ms
+第 3 次：总耗时 1.30s   control_pump 写回执 100ms
+
+单次原始输出（节选）：
+  {"workflow": "smart_irrigation", "ok": true, "steps": [
+    {"id": "s1", "tool": "get_soil_moisture", "status": "ok", "output": 24.2, "latency_ms": 0},
+    {"id": "s2", "tool": "get_light_intensity", "status": "ok", "output": 12123.5, "latency_ms": 0},
+    {"id": "s3", "tool": "control_pump", "status": "ok",
+     "output": {"soil_moisture": 24.2, "light_intensity": 12123.5,
+                "pump": "on", "action": "on", "duration": 300,
+                "request_id": "1b7d6fd0"},
+     "latency_ms": 100}]}
+
+判据：s3 状态中 pump=on 且 request_id 等于本次命令 trace_id → 写回执确认成立
+     （adapter._call_write 用 request_id 精确匹配，避免陈旧回执误判）
+
+----------------------------------------------------------------
+三、设备侧物理行为（模拟器日志节选）
+----------------------------------------------------------------
+[sim_irrigation] 命令 {'action': 'on', 'duration': 300, 'request_id': '086dcb3a'} -> 水泵 on（300s 后自动停止）
+[sim_irrigation] .../state <- {'soil_moisture': 25.4, ..., 'pump': 'on', 'request_id': '086dcb3a'}
+[sim_irrigation] .../state <- {'soil_moisture': 28.4, ..., 'pump': 'on', ...}
+[sim_irrigation] .../state <- {'soil_moisture': 31.4, ..., 'pump': 'on', ...}
+[sim_irrigation] .../state <- {'soil_moisture': 34.4, ..., 'pump': 'on', ...}
+→ 开泵后土壤湿度由 22.4% 回升至 34.4%，复现真机"浇水后读数爬升"的物理行为。
+
+----------------------------------------------------------------
+四、指标对照（真机记录 → 模拟器实测）
+----------------------------------------------------------------
+| 指标              | 真机（原记录） | 模拟器（本次实测） |
+|-------------------|----------------|--------------------|
+| 上电自动发现      | 8.6s           | 0.23s              |
+| 浇水闭环总耗时    | 2.8s           | 1.30s              |
+| 水泵写回执        | 212ms          | 100ms              |
+| 传感器读取        | 0ms（缓存）    | 0ms（缓存）        |
+说明：模拟器无 Wi-Fi 建链、无无线链路抖动、无继电器机械动作，
+      故各项耗时均低于真机；本表如实记录，不作等同声称。
+
+----------------------------------------------------------------
+五、自动化测试
+----------------------------------------------------------------
+python -m pytest tests/unit/test_esp32_greenhouse_sim.py -q   → 7 passed
+python -m pytest -q                                          → 179 passed, 5 skipped
+（5 项跳过为可选依赖缺失：fastmcp / cryptography，与本次改造无关）
+
+覆盖：
+  - UniSpec 契约（3 工具、读写标记、stateField、command_topic、时长上限 600s）
+  - 发现 + 读路径（缓存读取 25.0 / 12000.0）
+  - 无状态读 → 1006
+  - 写路径（发布命令 qos=1 → request_id 回执确认）
+  - 工作流定义（3 步 + 依赖 + 条件 {{s1.output}} < 30）
+
+----------------------------------------------------------------
+六、演示档验证（不设 HUB_WORKFLOWS，走默认 workflows.yaml）
+----------------------------------------------------------------
+背景：演示脚本 demo_start.ps1 启动温室模拟器但不切换工作流档位，
+      故 smart_irrigation 已补入演示档 core/workflow/workflows.yaml
+      （与硬件档 workflows_hardware.yaml 中的定义逐字段一致）。
+实测：run_workflow smart_irrigation → ok:true，总耗时 1.29s
+      s1 get_soil_moisture = 24.6（0ms）
+      s2 get_light_intensity = 12144.6（0ms）
+      s3 control_pump(action=on, duration=300) = pump:"on"，回执 100ms
+结论：演示档第四幕可直接执行，无需额外环境变量。
+

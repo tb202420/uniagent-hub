@@ -1,0 +1,25 @@
+# 硬件测试脚本注册（改进方案 §7 / docs/hardware/hardware_test_plan.md）
+# 默认不加载：硬件测试档通过环境变量追加本配置（分号分隔多份配置）：
+#   HUB_SCRIPT_CONFIGS="adapters/script_adapter/configs/scripts.yaml;adapters/script_adapter/configs/hardware_tests.yaml"
+# 依赖：opencv-python（pip install opencv-python）；未装/无摄像头时脚本返回结构化 JSON 错误。
+scripts:
+  - id: "script.camera.capture"
+    name: "摄像头抓拍"
+    description: "抓拍一张照片保存到 data/captures（硬件测试 1：Script 适配器 × USB 摄像头）"
+    runtime: "python"
+    entry: "camera_capture.py"
+    args_template: "capture --out {output_path # 输出文件名（保存到 data/captures 目录下）}"
+    tool_name: "capture_image"
+    readOnly: false
+    permissionLevel: "write"
+    timeout: 15s
+
+  - id: "script.camera.motion"
+    name: "运动检测"
+    description: "检测画面中是否有运动（返回像素统计；硬件测试 1）"
+    runtime: "python"
+    entry: "camera_capture.py"
+    args_template: "detect_motion"
+    tool_name: "detect_motion"
+    readOnly: true
+    timeout: 15s

@@ -1,0 +1,204 @@
+通用AI Agent工具集成平台（UniAgent Hub）—— 完善方案与技术栈
+一、平台定位与核心理念
+在方向三“一规范多设备”的基础上，将平台扩展为一个协议无关的通用工具集成层：Agent通过MCP协议统一调用各类资源——物联网设备、CLI命令行工具、REST API、本地脚本、数据库——平台负责将这些异构资源自动发现、标准化封装为MCP工具，并完成路由、编排与安全管控。
+
+核心设计原则：Agent不需要知道工具是什么类型，只需要调用MCP工具。设备通过MQTT上报能力描述，CLI工具通过配置文件注册，REST API通过OpenAPI Spec导入，三者被平台统一抽象为MCP Tool，暴露给上层Agent。用一个比喻来说：这个平台就像是AI世界的USB-C接口——无论背后是传感器、命令行工具还是云服务，插上来就能用。
+
+平台名称建议：UniAgent Hub（通用Agent工具集成平台）。
+
+二、整体架构设计
+text
+┌──────────────────────────────────────────────────────────┐
+│                    Agent 层（智能决策）                     │
+│     Claude / GPT / 本地模型 + Agent框架（PraisonAI等）     │
+│     通过统一 MCP Client 调用所有工具                       │
+└──────────────────────┬───────────────────────────────────┘
+                       │ MCP Protocol (JSON-RPC 2.0)
+                       │ Stateless HTTP / stdio
+┌──────────────────────▼───────────────────────────────────┐
+│              UniAgent Hub 核心层（本项目的核心）             │
+│                                                          │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  │
+│  │ 工具注册中心  │  │ MCP路由网关   │  │ 工具编排引擎    │  │
+│  │ ToolRegistry │  │ MCP Gateway  │  │ WorkflowEngine │  │
+│  └─────────────┘  └──────────────┘  └────────────────┘  │
+│                                                          │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  │
+│  │ 规范适配层    │  │ 安全与权限    │  │ CLI生成器      │  │
+│  │ SpecAdapter  │  │ Guard        │  │ CLIGenerator   │  │
+│  └─────────────┘  └──────────────┘  └────────────────┘  │
+│                                                          │
+└──┬──────────────┬──────────────┬──────────────┬─────────┘
+   │              │              │              │
+   ▼              ▼              ▼              ▼
+┌──────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+│物联网 │   │ CLI工具  │   │ REST API │   │ 本地脚本  │
+│设备层 │   │ 适配器   │   │ 适配器   │   │ 适配器    │
+│MQTT   │   │注册+执行 │   │OpenAPI   │   │Python/   │
+│ESP32  │   │          │   │Spec导入  │   │Shell     │
+└──────┘   └──────────┘   └──────────┘   └──────────┘
+三、核心模块详细设计
+模块1：统一能力描述规范（UniSpec）
+这是整个平台的基石。每一类资源——无论设备、CLI工具还是API——都用同一套JSON Schema描述其能力。设计上参考MCP的Tool定义和EMQX的DeviceSpec范式：MCP的工具定义包含name、title、description和inputSchema（JSON Schema格式），DeviceSpec则包含Name、Commands、Properties、Events四部分，本质上是设备与Agent之间的“能力契约”。
+
+UniSpec统一格式示例：
+
+json
+{
+  "id": "device.livingroom.temperature",
+  "type": "iot_device",
+  "name": "客厅温度传感器",
+  "protocol": "mqtt",
+  "endpoint": { "broker": "mqtt://localhost:1883", "topic": "home/livingroom/temp" },
+  "capabilities": [
+    {
+      "name": "get_temperature",
+      "description": "获取客厅当前温度",
+      "inputSchema": { "type": "object", "properties": {} },
+      "outputSchema": { "type": "number", "unit": "celsius" }
+    }
+  ],
+  "constraints": { "readOnly": true, "rateLimit": "1/s" }
+}
+CLI工具同样用UniSpec描述：
+
+json
+{
+  "id": "cli.git.status",
+  "type": "cli_tool",
+  "name": "Git状态查询",
+  "command": "git status --short",
+  "capabilities": [
+    {
+      "name": "git_status",
+      "description": "查看当前仓库的Git状态",
+      "inputSchema": { "type": "object", "properties": { "repo_path": { "type": "string" } } }
+    }
+  ]
+}
+创新点：当前MCP生态中设备、CLI、API各有各的集成方式，UniSpec的价值在于提供一个统一的能力描述层，让平台可以用同一套管道处理所有类型的资源。这与W3C Web of Things的Thing Description思路一脉相承，但针对AI Agent的工具调用场景做了MCP适配。
+
+模块2：CLI适配器（CLI Adapter）
+这是你在需求中特别强调的模块。CLI适配器让平台能够将任何命令行工具封装为MCP Tool。参考Studio MCP的做法——它使用类似Mustache的模板语法，将命令中的参数占位符自动转换为MCP工具的inputSchema：
+
+text
+studio command "{ required_argument # Description of argument }""[optional_args... # any array of arguments]"
+CLI适配器的核心工作流程：
+
+第一步，注册。用户通过配置文件声明CLI工具的能力：
+
+yaml
+cli_tools:
+  - id: "cli.file.search"
+    name: "文件搜索"
+    command: "find {directory} -name '{pattern}' -type f"
+    description: "在指定目录搜索匹配的文件"
+    readOnly: true
+    timeout: 10s
+第二步，Schema自动生成。平台解析命令模板中的{placeholder}，自动生成JSON Schema：
+
+json
+{
+  "name": "file_search",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "directory": { "type": "string", "description": "搜索目录" },
+      "pattern": { "type": "string", "description": "文件名模式" }
+    },
+    "required": ["directory", "pattern"]
+  }
+}
+第三步，沙箱执行。CLI命令在受限的进程沙箱中执行，限制文件系统访问范围和命令超时，执行结果以结构化格式返回给Agent。可参考FastMCP的generate功能——它连接MCP服务器后读取工具列表，生成可直接调用的Python脚本和SKILL.md文件。
+
+第四步，反向生成。平台还可以将已注册的MCP工具反向生成为CLI命令，方便开发者调试和手动调用。MCPorter的code-generation模式已经验证了这种双向能力的可行性。
+
+这里需要注意一个关键工程问题：Studio MCP使用npx的简单Shell参数数组来执行命令，没有沙箱隔离和注入防护，当Agent动态生成参数时存在命令注入风险。UniAgent Hub需要在架构层面引入参数白名单校验——每个参数在UniSpec中声明其类型和允许的字符范围，执行前先做严格校验再拼接命令，而不是直接将LLM输出传入Shell。这不仅是安全考量，也是比赛中展示工程思维的重要加分点。
+
+模块3：MCP路由网关（MCP Gateway）
+网关是Agent与后端所有工具之间的唯一入口。Agent只与网关建立MCP连接，网关负责：
+
+工具发现。Agent通过tools/list请求获取平台注册的所有工具。2026-07-28版MCP规范引入了server/discoverRPC，服务器可通过此接口预先广告其支持的协议版本、能力和身份。网关可以实现server/discover，让Agent在连接前就了解平台的全部能力范围。
+
+多工具路由。网关维护工具名称到后端适配器的映射表。当Agent调用tools/call时，网关根据工具ID将请求路由到对应的适配器（MQTT设备、CLI执行器、REST代理等）。当前MCP规范从有状态连接转向了无状态核心——移除了协议级会话和initialize握手，每个请求都自带协议版本和客户端能力信息。这意味着网关可以简单地水平扩展，不需要维护会话状态，部署复杂度大幅降低。
+
+协议版本协商。网关需要同时支持2026-07-28无状态规范和2025-11-25有状态规范。FastMCP 4的做法值得借鉴：通过per-connection协商，旧协议客户端可以与升级后的服务器正常工作。
+
+多服务器聚合。参考MCP Mediator模式——一个MCP服务器同时作为下游多个MCP服务器的客户端，将多个服务器的工具聚合为统一的工具列表对外暴露。UniAgent Hub的路由网关本质上就是这个模式的生产级实现。
+
+模块4：工具编排引擎（Workflow Engine）
+当Agent的任务需要调用多个工具时，编排引擎负责流程规划与执行。参考MCP Workflow Engine的设计思路——将智能（决定做什么）与执行（实际执行）解耦，Agent一次性推理生成声明式工作流蓝图（JSON文档），指定MCP工具调用的有向序列，包含参数化模板、循环、并行分支和数据管道。
+
+json
+{
+  "workflow": "morning_routine",
+  "steps": [
+    { "id": "s1", "tool": "get_temperature", "args": { "room": "bedroom" } },
+    { "id": "s2", "tool": "get_weather", "args": { "city": "Beijing" } },
+    { "id": "s3", "tool": "ac_control", 
+      "args": { "action": "on", "temperature": "{{s1.output}} - 2" },
+      "depends_on": ["s1"] }
+  ]
+}
+后续执行由单次run_workflow工具调用触发，无论蓝图内部多复杂，Agent只消耗一次调用的token，避免了每步都要Agent推理的token浪费。
+
+模块5：安全与权限（Guard Module）
+MCP生态在2026年面临严重的安全挑战——60天内发布了30个CVE，38%的MCP服务器未实施任何认证。UniAgent Hub必须将安全作为核心设计要素而非事后补丁：
+
+工具级权限：每个工具声明readOnly/write/admin级别，Agent调用前做权限校验
+
+参数校验：基于UniSpec中的inputSchema做严格的Zod/JSON Schema校验，阻止参数注入
+
+审计日志：记录所有工具调用的完整链路（谁调用、什么参数、何时、结果如何）
+
+速率限制：按工具ID和调用方维度限流，防止Agent陷入无限循环
+
+四、完整技术栈
+4.1 核心框架与语言
+层级	技术选型	理由
+主语言	Python 3.12 + TypeScript 5.x	Python负责设备适配器和数据管道，TypeScript负责CLI工具链和类型安全的MCP服务器
+MCP Server框架	FastMCP 4（Python）+ @modelcontextprotocol/sdk v2（TypeScript）	FastMCP是MCP Python SDK的高层封装，被下载超过百万次/天，驱动70%的MCP服务器；TS SDK v2完整支持2026-07-28规范，使用Zod v4做schema验证
+MCP Client框架	MCP Python SDK v2 / TS SDK v2	官方SDK，支持无状态HTTP和stdio两种传输
+Agent框架	PraisonAI 或 OpenClaw	PraisonAI支持5行代码实例化智能体、100+模型提供商切换；OpenClaw轻量化部署、内置Skill技能库
+4.2 物联网设备接入层
+组件	技术选型	说明
+MQTT Broker	EMQX开源版 或 Mosquitto	EMQX支持Device Agent方案和MCP over MQTT集成，已在工业IoT场景中验证
+设备端协议	MQTT 3.1.1 / 5.0	设备只需发布JSON格式的UniSpec能力描述到指定topic
+MCP-MQTT桥接	自研适配器，参考IoT-MCP框架	IoT-MCP在22种传感器和6种MCU上实现了100%任务成功率、205ms平均响应时间和74KB峰值内存占用
+设备发现	MQTT Topic通配符 + UniSpec注册	设备上线时向uniagent/register topic发布UniSpec，网关自动发现并生成MCP工具定义
+4.3 CLI适配器技术栈
+组件	技术选型	说明
+命令模板解析	自研模板引擎（参考Studio MCP的Mustache风格语法）	解析{placeholder # description}格式，自动生成JSON Schema
+命令执行沙箱	Python subprocess + resource限制 / Node.js child_process + 超时控制	限制文件系统访问范围、CPU时间和内存上限
+参数校验	Zod（TypeScript）/ Pydantic（Python）	执行前校验所有参数，防止命令注入
+CLI反向生成	参考FastMCP generate功能	将已注册的MCP工具生成为独立CLI脚本，方便调试
+4.4 路由与编排层
+组件	技术选型	说明
+MCP网关	自研，基于FastAPI（Python）或Express（TypeScript）	实现tools/list、tools/call、server/discover三个核心端点
+工具注册中心	SQLite（开发）/ PostgreSQL（生产）	存储UniSpec描述、工具调用日志、权限配置
+工作流引擎	自研，JSON工作流蓝图 + 拓扑排序执行	参考MCP Workflow Engine的MCP Mediator模式
+消息队列（可选）	Redis Pub/Sub 或 NATS	用于多适配器间的事件通知和异步任务分发；NATS内置MQTT适配器，适合边缘多Agent场景
+4.5 传输与部署
+组件	技术选型	说明
+MCP传输	Streamable HTTP（无状态）+ stdio（本地调试）	2026-07-28规范推荐的无状态HTTP传输，无需sticky session，可直接用round-robin负载均衡
+容器化	Docker + Docker Compose	一键启动MQTT Broker、网关、Agent服务
+轻量部署	单机部署：2GB内存服务器即可运行	所有组件可在同一台机器上运行，总内存占用约1.5GB
+云部署（可选）	Cloudflare Workers / Vercel / Fly.io	无状态MCP服务器可部署到Serverless平台，参考mcp-stateless-starter项目
+大模型API	阿里云百炼免费额度 / DeepSeek / 本地Ollama	开发和演示阶段可零成本运行
+4.6 可观测性
+组件	技术选型	说明
+结构化日志	structlog（Python）/ pino（TypeScript）	JSON格式日志，包含trace_id、tool_name、latency等字段
+指标监控	Prometheus + Grafana（可选）	工具调用次数、延迟分布、错误率
+审计追踪	SQLite日志表 + 简单Web界面	记录每次工具调用的完整链路
+五、实施路径与里程碑
+第一阶段：MVP（1-2周）
+搭建最小可运行原型：一个Python FastMCP服务器 + 2-3个MQTT设备（ESP32上报温度/湿度）+ 1个CLI工具（如git status的封装）+ Agent通过MCP调用验证。验证“Agent → MCP Gateway → 适配器 → 资源”的完整链路。
+
+第二阶段：核心模块（2-3周）
+实现UniSpec规范定义、工具注册中心、路由网关的多工具路由、CLI适配器的Schema自动生成。完成至少5个不同类型的工具注册（2个IoT设备、2个CLI工具、1个REST API），验证“一规范多类型”的核心主张。
+
+第三阶段：编排与安全（1-2周）
+实现工作流引擎，支持多工具编排（如“查询温度 → 判断是否超过阈值 → 控制空调”）。加入权限校验、参数校验和审计日志。
+
+第四阶段：演示与文档（1周）
+设计演示场景（建议选择“智能办公环境管理”或“开发环境自动化”这类评委容易理解的场景），准备技术文档和现场演示脚本。

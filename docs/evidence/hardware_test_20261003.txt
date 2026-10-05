@@ -1,0 +1,142 @@
+﻿=== 硬件测试执行记录（2026-10-03，无外部硬件用例）===
+
+--- [1] hardware_probe check ---
+[probe] Hub /healthz: {"status": "ok", "tools": 19, "adapters": [{"name": "cli", "ok": true, "config": "adapters\\cli_adapter\\configs\\cli_tools.yaml", "tools": 2}, {"name": "cli", "ok": true, "config": "adapters\\cli_adapter\\configs\\system_monitor.yaml", "tools": 2}, {"name": "rest", "ok": true, "servers": ["https://api.open-meteo.com"], "cached_reads": 0}, {"name": "rest", "ok": true, "servers": ["http://127.0.0.1:8898"], "cached_reads": 0}, {"name": "script", "ok": true, "scripts_root": "D:\\projec_UniAgent Hub\\adapters\\script_adapter\\scripts"}, {"name": "script", "ok": true, "scripts_root": "D:\\projec_UniAgent Hub\\adapters\\script_adapter\\scripts"}, {"name": "database", "ok": true, "db_path": "D:\\projec_UniAgent Hub\\data\\uniagent_demo.db"}, {"name": "mqtt", "ok": true, "broker": "mqtt://127.0.0.1:1883", "connected": true, "devices": 3, "state_topics": 3}]}
+[probe] 工具注册: 19 个 | 预期硬件工具 8 个，缺失 无
+[probe] 只读探测（4 个，caller=hardware_probe）：
+    ✓ get_system_cpu         56
+    ✓ get_system_memory      16.44
+    ✓ plug_get_state         {"power": false, "online": true, "updated_at": ""}
+    ✓ get_phone_battery      66.1
+
+--- [2] hardware_test_run --perf 3 ---
+python.exe : C:\Users\admin\AppData\Local\Programs\Python\Python314\python.exe: No module named scripts.hardware_test_r
+un
+At line:15 char:3583
++ ... ev -Append; & "C:\Users\admin\AppData\Local\Programs\Python\Python314 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\admin\...rdware_test_run:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+--- [2] hardware_test_run --perf 3 ---
+========================================================================
+UniAgent Hub 硬件测试用例执行器（无外部硬件用例） — http://127.0.0.1:8020
+========================================================================
+[PASS] TC-15  blocked=True leaked_file=False | {"ok": false, "error": "ValueError: 输出路径超出白名单: D:\\projec_UniAgent Hub
+[PASS] TC-21  {"power": false, "online": true, "updated_at": ""}
+[PASS] TC-22  set T→{"power": true, "online": true, "updated_at" ; set F→{"power": false, "online": true, "updated_at
+[PASS] TC-23  低温分支（15.2°C<20）→ s2=ok plug_on=True
+[PASS] TC-24  写(read权限)=1003 / 读(read权限)=ok
+[PASS] TC-31  手机工具已注册=True（注册发现；probe watch 证据另行采集）
+[PASS] TC-32  battery=61.2 temperature=26.5
+[PASS] TC-33  steps=['ok', 'ok']
+[PASS] TC-41  CPU=63%
+[PASS] TC-42  可用内存=16.36GB
+[PASS] TC-43  steps=[('s1', 'ok'), ('s2', 'ok'), ('s3', 'ok')]
+[PASS] TC-44  未知参数→1002
+[PASS] TG-2   tools=19（期望 19）
+[PASS] TG-3   records=29 chained=29 chain_ok=True schema_hash字段=True ok
+[SKIP] TG-4   Hub 未以 --meta-tools 启动（复现：重启并加 --meta-tools）
+------------------------------------------------------------------------
+PASS=14  FAIL=0  SKIP=1
+
+性能采样（中位 / 最大，单位 ms；每工具 3 次，独立 caller）：
+  get_system_cpu         中位  1339  最大  1399
+  get_system_memory      中位   593  最大   631
+  plug_get_state         中位  1442  最大  1477
+  get_phone_battery      中位     0  最大     0
+  get_temperature        中位     0  最大     0
+  run_workflow(dev_machine_health) 中位  2145  最大  2277
+  run_workflow(phone_battery_snapshot) 中位    10  最大    11
+
+未覆盖用例（需特定环境 / 人工执行，复现指引见 docs/hardware/hardware_test_cases.md）：
+  TC-11/12/13  摄像头取景（人工执行，涉及取景与隐私）
+  TC-14        依赖缺失 / 无摄像头降级分支（需卸载 opencv 或断开摄像头）
+  TC-25        去掉 HUB_REST_ALLOWED_PRIVATE_HOSTS 重启 Hub 后复跑 plug_get_state（预期 1006）
+  TC-34        重启 Hub 后复跑 TC-32（晚订阅 retain 恢复）
+  TC-35        以 mock 注册一台“只注册不上报”的设备后调用其工具（预期 1006）
+
+--- [3] probe watch（TC-31 设备注册取证）---
+[probe] 已连接 mqtt://127.0.0.1:1883，监听 uniagent-hub-rxyc/register/+ （6s）…
+[probe] 设备注册: iot.phone_01（手机传感器节点（模拟）） 能力: ['get_phone_battery', 'get_phone_temperature']
+[probe] 设备注册: iot.temp_01（客厅温度传感器（模拟）） 能力: ['get_temperature', 'get_humidity']
+[probe] 设备注册: iot.ac_01（空调控制器（模拟）） 能力: ['get_ac_state', 'ac_control']
+[probe] 设备注册: iot.phone_01（手机传感器节点（模拟）） 能力: ['get_phone_battery', 'get_phone_temperature']
+[probe] 设备注册: iot.temp_01（客厅温度传感器（模拟）） 能力: ['get_temperature', 'get_humidity']
+[probe] 设备注册: iot.ac_01（空调控制器（模拟）） 能力: ['get_ac_state', 'ac_control']
+[probe] 监听结束：收到 6 个设备注册（iot.phone_01, iot.temp_01, iot.ac_01, iot.phone_01, iot.temp_01, iot.ac_01）
+
+--- [4] TC-35 只注册不上报设备（预期 1006）---
+设备已注册(TG/TC-31 前置): True
+TC-35 result: error_code= 1006 | [error 1006] 设备 iot.phone_02 无最新状态（离线或未上报）
+TC-35 判定: PASS
+
+--- [5] 无私有地址放行重启后：TC-34（retain 恢复）+ TC-25（SSRF 拦截）---
+========================================================================
+UniAgent Hub 硬件测试用例执行器（无外部硬件用例） — http://127.0.0.1:8020
+========================================================================
+[PASS] TC-32  battery=54.9 temperature=26.8
+[PASS] TC-33  steps=['ok', 'ok']
+------------------------------------------------------------------------
+PASS=2  FAIL=0  SKIP=0
+
+未覆盖用例（需特定环境 / 人工执行，复现指引见 docs/hardware/hardware_test_cases.md）：
+  TC-11/12/13  摄像头取景（人工执行，涉及取景与隐私）
+  TC-14        依赖缺失 / 无摄像头降级分支（需卸载 opencv 或断开摄像头）
+  TC-25        去掉 HUB_REST_ALLOWED_PRIVATE_HOSTS 重启 Hub 后复跑 plug_get_state（预期 1006）
+  TC-34        重启 Hub 后复跑 TC-32（晚订阅 retain 恢复）
+  TC-35        以 mock 注册一台“只注册不上报”的设备后调用其工具（预期 1006）
+TC-34 重启后读取手机状态: PASS | value= 54.8
+TC-25 SSRF 拦截: error_code= 1006 | [error 1006] SSRF 防护拦截: 拒绝访问私有/保留地址: 127.0.0.1
+TC-25 判定: PASS
+
+--- [6] --meta-tools 模式：TG-2 / TG-4 ---
+========================================================================
+UniAgent Hub 硬件测试用例执行器（无外部硬件用例） — http://127.0.0.1:8020
+========================================================================
+[PASS] TG-2   元工具模式（4 个）——全量面见非 meta 模式
+[PASS] TG-4   execute_tool(get_system_cpu)=ok
+------------------------------------------------------------------------
+PASS=2  FAIL=0  SKIP=0
+
+未覆盖用例（需特定环境 / 人工执行，复现指引见 docs/hardware/hardware_test_cases.md）：
+  TC-11/12/13  摄像头取景（人工执行，涉及取景与隐私）
+  TC-14        依赖缺失 / 无摄像头降级分支（需卸载 opencv 或断开摄像头）
+  TC-25        去掉 HUB_REST_ALLOWED_PRIVATE_HOSTS 重启 Hub 后复跑 plug_get_state（预期 1006）
+  TC-34        重启 Hub 后复跑 TC-32（晚订阅 retain 恢复）
+  TC-35        以 mock 注册一台“只注册不上报”的设备后调用其工具（预期 1006）
+
+--- [7] TC-23 常温分支（temp=25 重启模拟器后；预期 s2 skipped）---
+========================================================================
+UniAgent Hub 硬件测试用例执行器（无外部硬件用例） — http://127.0.0.1:8020
+========================================================================
+[PASS] TC-23  常温分支（24.9°C≥20）→ s2=skipped（跳过）
+------------------------------------------------------------------------
+PASS=1  FAIL=0  SKIP=0
+
+未覆盖用例（需特定环境 / 人工执行，复现指引见 docs/hardware/hardware_test_cases.md）：
+  TC-11/12/13  摄像头取景（人工执行，涉及取景与隐私）
+  TC-14        依赖缺失 / 无摄像头降级分支（需卸载 opencv 或断开摄像头）
+  TC-25        去掉 HUB_REST_ALLOWED_PRIVATE_HOSTS 重启 Hub 后复跑 plug_get_state（预期 1006）
+  TC-34        重启 Hub 后复跑 TC-32（晚订阅 retain 恢复）
+  TC-35        以 mock 注册一台“只注册不上报”的设备后调用其工具（预期 1006）
+
+--- [8] TC-14 依赖缺失分支（历史证据：安装 opencv 之前，2026-10-03 15:34 会话实测）---
+[实测输出 1] detect_motion 返回结构化降级（exit 0）：
+  ✓ detect_motion  {"ok": false, "error": "未安装 opencv-python", "hint": "pip install opencv-python"}
+[实测输出 2] 工作流 security_monitor 按预期降级（条件引用的数值字段由失败载荷提供）：
+  {"workflow": "security_monitor", "ok": true, "steps": [{"id": "s1", ... "output": {"ok": false, "error": "未安装 opencv-python", ..., "motion_detected": false, "pixel_count": 0}}, {"id": "s2", ... "status": "skipped"}]}
+说明：本机后续已安装 opencv 5.0.0（硬件测试 1 依赖），该分支如需复核须卸载 opencv 或断开摄像头。
+
+--- [9] TG-1 硬件接入工件清单（全部为配置/脚本/规格/蓝图，core/ 零改动）---
+OK  adapters/script_adapter/scripts/camera_capture.py (4386B)
+OK  adapters/script_adapter/configs/hardware_tests.yaml (1172B)
+OK  adapters/cli_adapter/configs/system_monitor.yaml (1227B)
+OK  adapters/rest_adapter/specs/smart_plug.yaml (1409B)
+OK  core/workflow/workflows_hardware.yaml (1967B)
+OK  scripts/mock_plug_api.py (3616B)
+OK  scripts/mock_phone_sensor.py (4025B)
+OK  scripts/hardware_probe.py (7608B)
+OK  scripts/hardware_test_run.py (11773B)
+说明：以上 9 个工件全部位于 adapters/*/configs、adapters/*/scripts、adapters/*/specs、
+scripts/、core/workflow/*.yaml（蓝图数据文件，非代码）；4 个测试接入未修改 core/ 任何 .py 文件。

@@ -1,0 +1,51 @@
+====================================================================
+UniAgent Hub 演示彩排 — 第1次（离线模式）（http://127.0.0.1:8020）
+====================================================================
+
+[评分1] P1-P6 就绪校验
+    ✓ Hub /healthz: {'status': 'ok', 'tools': 8}
+    ✓ get_weather 预热: latencies=[0, 0]
+    ✓ 温度/空调模拟器: temp=30.9, ac={"action": "off", "temperature": 26, "ts": "2026-09-26T01:38
+
+[第一幕] 统一工具发现（真实命令 agent.llm_agent --script）
+    ============================================================
+    UniAgent Hub LLM Agent — 决策与执行分离，安全不依赖 LLM
+    ============================================================
+    [agent] 脚本降级模式（未配置 LLM_API_KEY）
+    [agent] 工具发现：9 个工具 (git_status, file_search, get_weather, file_summary, get_ac_state, ac_control, get_temperature, get_humidity, run_workflow)
+    [agent] 固定剧本：查温度 → 温度过高则触发降温工作流
+        1. ✓ 30.9 (0ms)
+        2. 温度 30.9°C > 28°C → 触发 office_cooling：✓ {"workflow": "office_cooling", "ok": true, "steps": [{"id": "s1", "tool": "get_temperature", "status": "ok", "output": 30.9, "latency_ms": 0, "trace_id": "0a02f2bf"}, {"id": "s2", "tool": "get_weather", "status": "ok", "output": {"latitude": 39.9042, "longitude": 116.4074, "generationtime_ms": 0.12, "utc_offset_seconds": 28800, "timezone": "Asia/Shanghai", "timezone_abbreviation": "CST", "elevation": 44.0, "current_weather": {"temperature": 26.0, "windspeed": 9.4, "winddirection": 180.0, "weathercode": 1, "is_day": 1, "time": "2026-09-26T09:38"}}, "latency_ms": 0, "trace_id": "995b26ce"}, {"id": "s3", "tool": "ac_control", "status": "ok", "output": {"action": "on", "temperature": 28, "ts": "2026-09-26T01:39:03Z", "request_id": "3f0ab1a2"}, "latency_ms": 100, "trace_id": "3f0ab1a2"}], "params": {}, "trace_id": "32054485"} (100ms)
+
+[第二幕] 单工具调用
+    get_temperature=30.9(0ms) | git_status=ok(64ms) | get_weather=0ms(缓存)
+
+[第二幕] 工作流闭环 run_workflow(office_cooling)
+    {"workflow": "office_cooling", "ok": true, "steps": [{"id": "s1", "tool": "get_temperature", "status": "ok", "output": 30.9, "latency_ms": 0, "trace_id": "938833ad"}, {"id": "s2", "tool": "get_weather", "status": "ok", "output": {"latitude": 39.9042, "longitude": 116.4074, "generationtime_ms": 0.12, "utc_offset_seconds": 28800, "timezone": "Asia/Shanghai", "timezone_abbreviation": "CST", "elevatio
+    get_ac_state → {'action': 'on', 'temperature': 28, 'ts': '2026-09-26T01:39:03Z', 'request_id': '3f0ab1a2'}
+
+[第三幕] 安全拦截
+    注入 file_search → 1007 ([error 1007] 参数 pattern 含非法字符（注入防护拦截）: 'x; rm -rf /')
+    越权 ac_control(read) → 1003 ([error 1003] 权限不足: 需要 write，当前 read)
+    限流 get_temperature ×3 → [0, 1004, 1004]
+
+[第四幕] CLI 反向生成脚本实跑
+    gen_get_temperature.py → rc=0, stdout='30.9'
+
+[第五幕] 审计界面
+    审计页 blocked 行: True；工作流页含 office_cooling: True
+
+====================================================================
+#  结果    评分项                   说明
+--------------------------------------------------------------------
+1  ✓     P1-P6 就绪              P1-P6 就绪
+2  ✓     第一幕 工具发现              tools/list 返回 9 个工具（期望 9）
+3  ✓     第二幕 单工具三连             get_temperature=30.9(0ms)；git_status=ok(64ms)；get_weather=0ms(缓存)
+4  ✓     第二幕 工作流闭环             steps=['ok', 'ok', 'ok'], ac_action=on, ac_temp=28
+5  ✓     第三幕 安全三连              1007=1007, 1003=1003, 限流序列=[0, 1004, 1004]
+6  ✓     第四幕 CLI 反向生成          gen_get_temperature.py rc=0 输出='30.9'
+7  ✓     第五幕 审计可见              blocked=True, workflow_detail=True
+8  ✓     时长与稳定性                总耗时 3.8s（上限 300s）；无报错
+--------------------------------------------------------------------
+完整度评分：8/8
+====================================================================

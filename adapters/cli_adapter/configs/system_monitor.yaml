@@ -1,0 +1,23 @@
+# 硬件测试 4：PC 系统监控（CLI 适配器，改进方案 §7）
+# 无需任何额外硬件——PC 自身即"被管理资源"；零代码，纯 YAML 配置。
+# 命令已在本机（中文 Windows 11）实测可用（避免 Get-Counter 英文计数器名在
+# 中文系统上解析失败的问题）。
+# 加载：HUB_CLI_CONFIGS="adapters/cli_adapter/configs/cli_tools.yaml;adapters/cli_adapter/configs/system_monitor.yaml"
+cli_tools:
+  - id: "cli.system.cpu"
+    name: "CPU 使用率查询"
+    description: "获取当前 CPU 平均使用率（%，硬件测试 4：CLI 适配器 × 系统资源）"
+    command: 'powershell -NoProfile -Command "(Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average"'
+    tool_name: "get_system_cpu"
+    readOnly: true
+    timeout: 10s
+    allowed_commands: ["powershell"]
+
+  - id: "cli.system.memory"
+    name: "可用内存查询"
+    description: "获取当前可用物理内存（GB，硬件测试 4）"
+    command: 'powershell -NoProfile -Command "[math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB, 2)"'
+    tool_name: "get_system_memory"
+    readOnly: true
+    timeout: 10s
+    allowed_commands: ["powershell"]

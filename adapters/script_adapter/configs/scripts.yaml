@@ -1,0 +1,12 @@
+# 本地脚本注册配置（阶段 2）
+# 安全：entry 必须位于 scripts/ 下（../ 逃逸拒绝）；参数走 Gateway Guard 横切
+scripts:
+  - id: "script.file.summary"
+    name: "文件统计"
+    description: "统计指定目录下文件数量与清单（只读）"
+    runtime: "python"
+    entry: "file_summary.py"
+    args_template: "--dir {directory # 要统计的目录} --ext {ext # 扩展名过滤，可留空}"
+    tool_name: "file_summary"
+    readOnly: true
+    timeout: 10s

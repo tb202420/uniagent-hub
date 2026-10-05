@@ -1,0 +1,57 @@
+# 工作流蓝图（阶段 3 演示场景：智能办公环境管理）
+# 语法：
+#   depends_on: 依赖步骤 id（拓扑排序）
+#   condition:  条件表达式（自研安全解析器，零 eval）
+#   args:       {{sN.output}} / {{sN.output.字段}} / {{params.xxx}}，支持简单算术
+workflows:
+  office_cooling:
+    description: 办公温度调节：测温 → 超过 28°C → 开空调降温
+    steps:
+      - id: s1
+        tool: get_temperature
+        args: {}
+      - id: s2
+        tool: get_weather
+        args: {latitude: 39.9042, longitude: 116.4074, current_weather: true}
+        depends_on: [s1]
+      - id: s3
+        tool: ac_control
+        args:
+          # 注意：YAML 1.1 会把裸 on/off 解析为布尔，必须加引号
+          action: "on"
+          temperature: "{{s1.output}} - 2"
+        depends_on: [s1]
+        condition: "{{s1.output}} > 28"
+
+  office_status:
+    description: 办公环境快照：温度 + 天气 + 文件统计
+    steps:
+      - id: s1
+        tool: get_temperature
+        args: {}
+      - id: s2
+        tool: get_weather
+        args: {latitude: 39.9042, longitude: 116.4074, current_weather: true}
+      - id: s3
+        tool: file_summary
+        args: {directory: "{{params.dir}}", ext: "{{params.ext}}"}
+        depends_on: []
+
+  # 演示第四幕：ESP32 温室灌溉闭环（设备侧为 Python MQTT 模拟器）
+  # 设备启动：python -m adapters.mqtt_adapter.sim_esp32_greenhouse --init-soil 25
+  # 说明：与“硬件测试档” workflows_hardware.yaml 中的定义保持一致
+  smart_irrigation:
+    description: 温室灌溉：土壤湿度低于阈值 → 自动开泵浇水（ESP32 温室节点 · 模拟器）
+    steps:
+      - id: s1
+        tool: get_soil_moisture
+        args: {}
+      - id: s2
+        tool: get_light_intensity
+        args: {}
+        depends_on: [s1]
+      - id: s3
+        tool: control_pump
+        args: {action: "on", duration: 300}
+        depends_on: [s1, s2]
+        condition: "{{s1.output}} < 30"

@@ -1,0 +1,13 @@
+﻿=== FastMCP 4 HTTP 冒烟（transport=streamable-http, :8023）===
+[probe] GET http://127.0.0.1:8023/healthz -> 404
+[probe] GET http://127.0.0.1:8023/mcp -> 400
+[fallback-1] 根路径连接失败: MCPError Not Found
+[info] protocol_version = 2026-07-28
+[1] tools/list -> ['discover_tools', 'get_tool_schema', 'execute_tool', 'refresh_registry'] | count = 4
+[2] execute_tool(git_status) -> CallToolResult(content=[TextContent(type='text', text='M README.md\n M adapters/cli_adapter/adapter.py\n M adapters/cli_adapter/configs/cli_tools.yaml\n M adapters/mqtt_adapter/adapter.py\n M adapters
+[3] 判定: PASS
+
+--- 审计（HUB_AUDIT_FILE=data/audit_fastmcp_smoke.jsonl）---
+records: 2
+ - git_status | schema_hash: 8b1945d5758821a5
+ - execute_tool | schema_hash: 21ddf65246a960f0

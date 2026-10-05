@@ -1,0 +1,47 @@
+# Open-Meteo 天气预报 OpenAPI 规格（阶段 2 REST 适配器演示用）
+# 官方文档: https://open-meteo.com/en/docs
+openapi: "3.0.0"
+info:
+  title: Open-Meteo 天气预报
+  description: 免费无需 API Key 的天气服务（演示场景"智能办公环境管理"天气模块）
+  version: "1.0.0"
+servers:
+  - url: https://api.open-meteo.com
+paths:
+  /v1/forecast:
+    get:
+      operationId: get_weather
+      summary: 获取指定经纬度的当前天气
+      description: 根据纬度/经度查询当前天气（温度、风速等）。演示：Agent 查询"当前城市天气"。
+      parameters:
+        - name: latitude
+          in: query
+          required: true
+          description: 纬度（如北京 39.9042）
+          schema:
+            type: number
+        - name: longitude
+          in: query
+          required: true
+          description: 经度（如北京 116.4074）
+          schema:
+            type: number
+        - name: current_weather
+          in: query
+          description: 是否返回当前天气
+          schema:
+            type: boolean
+            default: true
+        - name: timezone
+          in: query
+          description: 时区（如 Asia/Shanghai）
+          schema:
+            type: string
+            default: auto
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object

@@ -1,0 +1,13 @@
+============================================================
+UniAgent Hub LLM Agent — 决策与执行分离，安全不依赖 LLM
+============================================================
+[agent] LLM 后端：http://localhost:11434  模型：gemma4local:latest  温度：0.0  num_ctx：16384  repeat_penalty：1.1
+[agent] 工具发现：9 个工具 (git_status, file_search, get_weather, file_summary, get_ac_state, ac_control, get_temperature, get_humidity, run_workflow)
+[agent] 模式：原生 tool_calls（ReAct 闭环，最多 8 轮）
+[agent] 目标：查询会议室温度；只有当温度超过 35 度时才开空调降温
+[agent] 第 1 轮：模型请求调用 72 个工具，⚠ 串行执行只保留第 1 个（丢弃 71 个，防重复退化）
+    1.1 tools/call get_temperature({})
+        ✓ 31.2 (0ms)
+[agent] 第 2 轮：模型给出结论（不再调用工具）
+[agent] 结论：当前会议室温度为 31.2 度，未超过 35 度，因此不执行开空调操作。
+[agent] 完成，共 2 轮 / 14.3s

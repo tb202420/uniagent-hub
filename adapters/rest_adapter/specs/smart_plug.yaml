@@ -1,0 +1,35 @@
+# 硬件测试 2：智能插座（REST 适配器，改进方案 §7）
+# 接口风格：通用"本地 HTTP 插座"（Tasmota / Shelly / 自建 ESP 继电器等）。
+# servers 默认指向本地 mock（scripts/mock_plug_api.py，端口 8898）——
+#   无硬件时用于预演链路；接真实设备时改为设备实际地址（如 http://192.168.1.50）。
+# 私有地址按 SSRF 策略需显式放行：HUB_REST_ALLOWED_PRIVATE_HOSTS=127.0.0.1（或设备 IP）。
+# Tuya / 米家等云 API 采用 HMAC 签名认证，需"认证插件"支持（规划中，
+#   见 docs/hardware/hardware_test_plan.md §2 测试 2）。
+openapi: "3.0.0"
+info:
+  title: 智能插座（本地 HTTP）
+  description: "硬件测试 2：智能插座 REST 接入（先 mock 预演、后接真机；零代码，纯 OpenAPI 配置）"
+  version: "1.0.0"
+servers:
+  - url: http://127.0.0.1:8898
+paths:
+  /status:
+    get:
+      operationId: plug_get_state
+      summary: 查询插座开关状态
+      responses:
+        "200": {description: 成功}
+  /set:
+    post:
+      operationId: plug_set_power
+      summary: 设置插座开关（power=true 开 / false 关）
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                power: {type: boolean}
+              required: [power]
+      responses:
+        "200": {description: 成功}

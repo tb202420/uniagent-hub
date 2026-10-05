@@ -1,0 +1,76 @@
+# 硬件测试工作流蓝图（改进方案 §7；仅硬件测试档加载，不影响演示档）
+# 加载：HUB_WORKFLOWS="core/workflow/workflows_hardware.yaml"
+# 注意：条件表达式仅支持数值/字符串比较（自研零 eval 解析器），
+#       布尔字段请改用其数值统计（如 pixel_count），见 core/workflow/expr.py。
+workflows:
+  # 测试 1：USB 摄像头安防（Script 适配器）
+  security_monitor:
+    description: 摄像头安防：检测到运动 → 自动抓拍存证（硬件测试 1）
+    steps:
+      - id: s1
+        tool: detect_motion
+        args: {}
+      - id: s2
+        tool: capture_image
+        args: {output_path: "alert.jpg"}
+        depends_on: [s1]
+        condition: "{{s1.output.pixel_count}} > 5000"
+
+  # 测试 2：智能插座（REST 适配器）
+  office_auto_light:
+    description: 室温过低 → 打开取暖插座（硬件测试 2；26°C 环境下条件为假是预期行为）
+    steps:
+      - id: s1
+        tool: get_temperature
+        args: {}
+      - id: s2
+        tool: plug_set_power
+        args: {body_power: true}
+        depends_on: [s1]
+        condition: "{{s1.output}} < 20"
+
+  # 测试 3：手机传感器节点（MQTT 适配器）
+  phone_battery_snapshot:
+    description: 手机电量与温度快照（硬件测试 3）
+    steps:
+      - id: s1
+        tool: get_phone_battery
+        args: {}
+      - id: s2
+        tool: get_phone_temperature
+        args: {}
+        depends_on: [s1]
+
+  # 测试 4：PC 系统监控（CLI 适配器 × 跨适配器编排：CLI + CLI + CLI(git)）
+  dev_machine_health:
+    description: 开发机健康快照：CPU 使用率 + 可用内存 + 代码仓库状态（硬件测试 4）
+    steps:
+      - id: s1
+        tool: get_system_cpu
+        args: {}
+      - id: s2
+        tool: get_system_memory
+        args: {}
+      - id: s3
+        tool: git_status
+        args: {repo_path: "{{params.repo}}"}
+        depends_on: [s1, s2]
+
+  # 测试 5：ESP32 温室灌溉节点（MQTT 适配器 × 模拟器，对齐研究报告 §5.8）
+  # 设备侧：adapters/mqtt_adapter/sim_esp32_greenhouse.py
+  #   启动：python -m adapters.mqtt_adapter.sim_esp32_greenhouse --init-soil 25
+  smart_irrigation:
+    description: 温室灌溉：土壤湿度低于阈值 → 自动开泵浇水（ESP32 温室节点 · 模拟器）
+    steps:
+      - id: s1
+        tool: get_soil_moisture
+        args: {}
+      - id: s2
+        tool: get_light_intensity
+        args: {}
+        depends_on: [s1]
+      - id: s3
+        tool: control_pump
+        args: {action: "on", duration: 300}
+        depends_on: [s1, s2]
+        condition: "{{s1.output}} < 30"

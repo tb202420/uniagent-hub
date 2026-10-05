@@ -1,0 +1,60 @@
+
+=== UniAgent Hub 一键演示启动 ===
+  仓库: D:\projec_UniAgent Hub
+  Python: C:\Users\admin\AppData\Local\Programs\Python\Python314\python.exe 
+  模式: 断网降级（本地 broker + Mock API）
+
+  [预检] 端口空闲: 8020, 18080, 1883, 8899
+  [MQTT] mqtt://127.0.0.1:1883
+  [REST] http://127.0.0.1:8899 (SSRF 白名单: 127.0.0.1)
+
+[1/6] 本地降级组件
+  [启动] broker         pid=13044
+  [启动] mock_weather   pid=16676
+[2/6] Hub 核心网关
+  [启动] hub            pid=14452
+  [就绪] Hub http://127.0.0.1:8020/healthz 健康检查通过，注册 8 个工具
+[3/6] 温度模拟器（--init-temp 31）
+  [启动] sim_temp       pid=4976
+[4/6] 空调模拟器
+  [启动] sim_ac         pid=19052
+[5/6] 审计 Dashboard
+  [启动] dashboard      pid=1140
+[6/6] 预热 get_weather + 就绪检查
+[warmup] Hub 已就绪（http://127.0.0.1:8020，注册 8 个工具）
+[warmup] 工具发现：9 个 — git_status, file_search, get_weather, file_summary, get_ac_state, ac_control, get_temperature, get_humidity, run_workflow
+[warmup] get_weather 第 1 次：453ms
+[warmup] get_weather 第 2 次：0ms（缓存命中预期 0ms）
+[warmup] 天气温度读数：26.0°C
+[warmup] get_temperature 就绪（第 1 次尝试，0ms）：30.3
+
+[warmup] ----------------------------------------------------
+[warmup] ✓ Hub /healthz     status=ok
+[warmup] ✓ tools/list       9 个工具
+[warmup] ✓ get_weather      453ms
+[warmup] ✓ get_weather      0ms
+[warmup] ✓ get_temperature  30.3
+[warmup] ----------------------------------------------------
+[warmup] 全部就绪，可以开始演示（P1-P6 完成）
+
+=== 启动汇总 ===
+
+Name         Port    Pid Status
+----         ----    --- ------
+broker       1883  13044 已启动   
+mock_weather 8899  16676 已启动   
+hub          8020  14452 已启动   
+sim_temp     -      4976 已启动   
+sim_ac       -     19052 已启动   
+dashboard    18080  1140 已启动   
+
+
+全部就绪 —— 可以开始 5 分钟演示。
+
+演示地址：
+  Hub      http://127.0.0.1:8020/healthz
+  审计面板 http://127.0.0.1:18080/
+  日志目录 D:\projec_UniAgent Hub\logs
+
+停止演示：关闭各组件的控制台窗口；或执行
+  13044,16676,14452,4976,19052,1140 | Stop-Process

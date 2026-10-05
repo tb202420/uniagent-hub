@@ -1,0 +1,39 @@
+# CLI 工具注册配置（阶段 1 MVP；A3 修复新增 platforms 跨平台支持）
+# 语法见 docs/unispec.md §7：{arg} 必填，{arg # 描述} 带描述
+# platforms（可选）：按宿主操作系统选择命令模板（linux/windows/darwin），
+# 模板条目内的键（command/param_patterns/allowed_commands/description）
+# 覆盖顶层同名键；宿主平台无对应模板时回退顶层 command。
+# 安全：allowed_commands 白名单 + param_patterns 注入防护
+cli_tools:
+  - id: "cli.git.status"
+    name: "Git 状态查询"
+    description: "查看指定仓库的 Git 工作区状态（只读）"
+    command: "git -C {repo_path # Git 仓库绝对路径} status --short"
+    tool_name: "git_status"
+    readOnly: true
+    timeout: 10s
+    allowed_commands: ["git"]
+    param_patterns:
+      repo_path: "^[a-zA-Z0-9_/.: -]+$"
+
+  - id: "cli.file.search"
+    name: "文件搜索"
+    description: "在指定目录递归搜索匹配文件名的文件（只读，按操作系统自动选择实现）"
+    tool_name: "file_search"
+    readOnly: true
+    timeout: 10s
+    platforms:
+      linux:
+        description: "在指定目录搜索匹配文件名的文件（Linux/macOS：find）"
+        command: "find {directory # 搜索目录} -name '{pattern # 文件名模式，支持 * 通配}' -type f"
+        allowed_commands: ["find"]
+        param_patterns:
+          directory: "^[a-zA-Z0-9_/.: -]+$"
+          pattern: "^[a-zA-Z0-9_./* -]+$"
+      windows:
+        description: "在指定目录搜索匹配文件名的文件（Windows：where /r）"
+        command: "where /r {directory # 搜索目录} {pattern # 文件名模式，支持 * 通配}"
+        allowed_commands: ["where"]
+        param_patterns:
+          directory: "^[a-zA-Z0-9_/.:\\ -]+$"
+          pattern: "^[a-zA-Z0-9_./* -]+$"

@@ -1,0 +1,55 @@
+
+=== UniAgent Hub 一键演示启动 ===
+  仓库: D:\projec_UniAgent Hub
+  Python: C:\Users\admin\AppData\Local\Programs\Python\Python314\python.exe 
+  模式: 在线（公共 broker + open-meteo）
+
+  [预检] 端口空闲: 8020, 18080
+  [MQTT] mqtt://broker.emqx.io:1883
+
+[1/6] 在线模式：使用公共 broker（跳过本地降级组件）
+[2/6] Hub 核心网关
+  [启动] hub            pid=35308
+  [就绪] Hub http://127.0.0.1:8020/healthz 健康检查通过，注册 8 个工具
+[3/6] 温度模拟器（--init-temp 31）
+  [启动] sim_temp       pid=26304
+[4/6] 空调模拟器
+  [启动] sim_ac         pid=3196
+[5/6] 审计 Dashboard
+  [启动] dashboard      pid=9036
+[6/6] 预热 get_weather + 就绪检查
+[warmup] Hub 已就绪（http://127.0.0.1:8020，注册 8 个工具）
+[warmup] 工具发现：9 个 — git_status, file_search, get_weather, file_summary, get_ac_state, ac_control, get_temperature, get_humidity, run_workflow
+[warmup] get_weather 第 1 次：1621ms
+[warmup] get_weather 第 2 次：0ms（缓存命中预期 0ms）
+[warmup] 天气温度读数：21.9°C
+[warmup] get_temperature 就绪（第 1 次尝试，0ms）：30.9
+
+[warmup] ----------------------------------------------------
+[warmup] ✓ Hub /healthz     status=ok
+[warmup] ✓ tools/list       9 个工具
+[warmup] ✓ get_weather      1621ms
+[warmup] ✓ get_weather      0ms
+[warmup] ✓ get_temperature  30.9
+[warmup] ----------------------------------------------------
+[warmup] 全部就绪，可以开始演示（P1-P6 完成）
+
+=== 启动汇总 ===
+
+Name      Port    Pid Status
+----      ----    --- ------
+hub       8020  35308 已启动   
+sim_temp  -     26304 已启动   
+sim_ac    -      3196 已启动   
+dashboard 18080  9036 已启动   
+
+
+全部就绪 —— 可以开始 5 分钟演示。
+
+演示地址：
+  Hub      http://127.0.0.1:8020/healthz
+  审计面板 http://127.0.0.1:18080/
+  日志目录 D:\projec_UniAgent Hub\logs
+
+停止演示：关闭各组件的控制台窗口；或执行
+  35308,26304,3196,9036 | Stop-Process

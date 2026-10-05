@@ -1,0 +1,47 @@
+# UniAgent Hub — Docker Compose 一键部署（比赛环境）
+# 用法：docker compose -f deploy/docker-compose.yml up -d --build
+# 说明：本地开发默认走公共 broker + Python 直跑（见 README），
+#       比赛部署用本文件的私有 EMQX；Agent 按需另行启动（LLM/脚本模式均可）。
+
+services:
+  # ---- MQTT Broker：设备接入 ----
+  emqx:
+    image: emqx/emqx:5.8
+    container_name: uniagent-emqx
+    ports:
+      - "1883:1883"    # MQTT
+      - "8083:8083"    # MQTT over WebSocket
+      - "18083:18083"  # 管理 Dashboard
+    environment:
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: "uniagent"
+    healthcheck:
+      test: ["CMD", "emqx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---- UniAgent Hub 核心（Gateway + Registry + Adapters + Guard）----
+  hub:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.hub
+    container_name: uniagent-hub
+    depends_on:
+      emqx:
+        condition: service_healthy
+    ports:
+      - "8000:8000"    # MCP Gateway (Streamable HTTP, POST /mcp)
+    environment:
+      HUB_MQTT_BROKER: "mqtt://emqx:1883"
+      HUB_TOPIC_PREFIX: "uniagent-hub-rxyc"
+    volumes:
+      - hub_data:/app/data
+    restart: unless-stopped
+
+  # ---- Demo Agent（本地联调直接 Python 直跑，无需容器化）----
+  # python -m agent.llm_agent --url http://127.0.0.1:8000   # LLM 模式
+  # python -m agent.llm_agent --script                      # 脚本降级模式
+
+volumes:
+  hub_data:
