@@ -459,3 +459,55 @@ python -m adapters.mqtt_adapter.sim_esp32_greenhouse --broker mqtt://127.0.0.1:1
 - 口径已同步：`docs/口径速查表.md`（测试行 / 作废口径 / 使用约定）、README、api.md（v0.5.1）、
   研究报告（摘要与表 15）、答辩讲稿、build_ppt.js；
 - 材料同步：研究报告 docx 重新导出；申报书 / 查新 / 核对清单中的测试数 203 → 216。
+
+
+---
+
+## 十五、v2.0 技术栈补全批次（2026-10-24 第二批）
+
+主线提交：main `a0f740f` / `caba151` / `7888630`（同步 public `f4a3031`，CI 6 job 绿）。
+测试 **261 项全绿**（236 基线 + 25：引擎 v2.0 11、Agent 宿主 10、网关端点 3、测试自调 1）。
+
+### 15.1 交付清单（对照 v2.0 技术栈文档）
+
+| 模块 | 内容 | 状态 |
+|---|---|---|
+| Agent 插件宿主（§3.3） | AgentAdapter 接口 + entry_points 组 `uniagent_hub.agent_adapters`；内置 script（规则意图，时长钳位 600）/ ollama（原生 tool_calls 串行闭环，温度 0）/ openai-compat；CLI `python -m agent.plugins` | ✅ 已实现并实测 |
+| 短期 JWT（§3.6） | `HUB_AUTH_MODE=jwt`：HS256、默认 10 分钟、claims 绑定 caller/perm/tools（白名单外 1003）、session=false；网关与 FastMCP 前端同语义；签发 CLI | ✅ 已实现并实测 |
+| 工作流 v2.0（§3.7） | 蓝图 `parallel: true` 拓扑层并发（实测 4 步 <0.95s vs 串行 1.2s；默认串行口径不变）；三元 `cond ? a : b`；DAG 深度 ≤20；事件流 `/workflows/events` 增量轮询 | ✅ 已实现并实测（事件流为轮询，WS 推送列 roadmap） |
+| 可观测（§3.11） | `/metrics`：tool_calls / guard_blocked / latency / workflow_runs（prometheus_client 软依赖） | ✅ 已实现 |
+| 场景模板 + 简易模式（§3.1） | scenes.yaml 5 场景；SPA 双模（简易=场景卡片+写操作确认+事件进度 chips）；ELK 自动布局（懒加载，回落手工分层） | ✅ 已实现（对话式 NL 引导未做，列 roadmap） |
+| 桌面档（§3.2/§四） | desktop/：Tauri 2 最小外壳 + 最小权限 capabilities + PyInstaller sidecar spec + 手动 CI 工作流 | ⚠️ 脚手架/CI 就绪（本地构建状态见 §16.3） |
+| 供应链（§3.12） | CI 增 pip-audit（advisory）与 CodeQL（周巡） | ✅ 已实现 |
+
+### 15.2 本批踩坑
+
+- `_emit(trace_id, **kw)` 与步骤结果自带 `trace_id` 字段撞名 → 首参改名 `wf`（测试当场抓住）；
+- JWT 工具白名单拒绝点最初误置于 ctx 构造之前 → 改为标志位 + ctx 后统一裁决；
+- PyJWT 对 <32 字节 HMAC 密钥告警 → 测试改用 32 字节密钥（生产密钥要求写入文档）。
+
+## 十六、真机联调与材料收口（2026-10-24 第三批）
+
+### 16.1 真机端到端（证据 `docs/evidence/real_device_e2e_20261024.txt`）
+
+凭据经 `src/secrets.h`（gitignore，仓库不含真实 WiFi）注入；本地 amqtt broker（0.0.0.0:1883）。
+实测：retain 注册 ✓ / 命令→回执 **avg 152ms（5/5）** / 自动停泵 **5.1s** 精确 / 经 Hub Guard
+全链路 **100ms**（request_id=trace_id 贯通）/ 审计含 schema_hash。测试时传感器未接线
+（DHT22/BH1750 缺省、ADC 悬空）——接线后即为真实读数，代码零改动。
+证据生成器入库：`scripts/real_device_e2e.py`（`--rounds 20` 参赛口径 / `--restart-broker` 重连计时）。
+
+> 口径注意：正文基线的"写回执 100ms"为**模拟器** QoS1 回执；本批 152ms 为**真机命令→回执往返**、
+> 100ms 为**真机经 Guard 全链路**——三者定义不同，附录 A 表 18 已分别标注。
+
+### 16.2 材料收口（本批主任务）
+
+- 研究报告采**路线 A**：正文 216 基线不动，摘要加一句增强说明，新增**附录 A**（表 18 增强验证 /
+  表 19 已实现·脚手架·roadmap 三态 / 表 20 测试口径演进 216→236→261），局限性补第 6 条；
+- 口径速查表新增 §6 全材料统一总表；答辩讲稿升级"最新进展"口播并新增六条必练问答；
+- 增强证据包：`docs/evidence/v20_enhancement_batch_20261024.txt`（261 输出 / JWT 签发与拒绝 /
+  并行耗时对比 / metrics 采样 / CI 快照）。
+
+### 16.3 待人工
+
+学校确认**本届**通知/组别/名额/截止（上届文号不套用）；2 分钟视频；查新 12 条；查重；盖章；
+文件夹命名按本届要求。Rust/Tauri 本地构建见 desktop/README 状态更新。

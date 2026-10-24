@@ -8,6 +8,13 @@
 
 ### 新增
 - 开源治理文件：LICENSE（Apache-2.0）/ CONTRIBUTING / SECURITY / 本文件
+- **材料收口批次（2026-10-24 第三批，路线 B）**：研究报告全文统一 261 口径
+  （六类适配器与真机端到端写入正文 4.9/5.8/表 2/表 15，附录 A 三表：18 增强证据 /
+  19 三态清单 / 20 测试演进；docx 重导 291 段 20 表）；口径速查表新增 §6 全材料
+  统一总表（测试演进 / 已实现·脚手架·roadmap 三态 / 真机数字定义对照 / 届次提醒）；
+  答辩讲稿升级 261 口播 + 材料收口六题必练问答；dev_log 补 §15/§16；
+  增强证据包 v20_enhancement_batch_20261024.txt（插件清单 / JWT 三态 / 并行 3 轮对比 /
+  metrics 采样 / CI 快照 / 桌面档 linker 状态如实记录）
 - **v2.0 补全批次（2026-10-24 第二批）**：
   - Agent 插件宿主：AgentAdapter 统一接口 + `uniagent_hub.agent_adapters` entry_points
     发现；内置 script（确定性规则意图解析）/ ollama（原生 tool_calls 串行闭环，

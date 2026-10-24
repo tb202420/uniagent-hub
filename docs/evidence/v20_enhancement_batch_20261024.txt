@@ -1,0 +1,92 @@
+v2.0 平台化增强批次证据（2026-10-24 · 报告附录 A 表 18 对应）
+
+================================================================
+[1] python -m pytest -q （全量）
+================================================================
+.............................................                            [100%]
+
+================================================================
+[2] python -m agent.plugins list
+================================================================
+[
+  {
+    "name": "script",
+    "ok": true,
+    "models": [
+      "deterministic-script"
+    ]
+  },
+  {
+    "name": "ollama",
+    "ok": false,
+    "models": [],
+    "reason": "Ollama 不可达（ConnectTimeout）"
+  },
+  {
+    "name": "openai-compat",
+    "ok": false,
+    "models": [],
+    "reason": "未配置 AGENT_OPENAI_KEY"
+  }
+]
+
+================================================================
+[3] 短期 JWT：签发 / 过期拒绝 / 工具白名单拒绝（1003）
+================================================================
+签发: caller=defense-demo perm=write tools=['control_pump'] ttl=600s
+校验:  {'caller': 'defense-demo', 'perm': 'write', 'tools': ['control_pump']}
+过期拒绝: OK -> 令牌已过期
+read 令牌调写工具 -> 1003: 1003
+白名单外工具 -> 1003: 1003
+白名单内 -> 放行 isError: False
+
+================================================================
+[4] 工作流并行 vs 串行（4 步 × 0.3s 桩，3 次重复）
+================================================================
+第1轮: 串行 1.20s | 并行 0.30s | 收益 4.0x
+第2轮: 串行 1.20s | 并行 0.30s | 收益 4.0x
+第3轮: 串行 1.20s | 并行 0.30s | 收益 4.0x
+
+================================================================
+[5] GET /metrics 采样（Prometheus 文本，节选）
+================================================================
+uniagent_tool_calls_total{result="ok",tool="get_x"} 1.0
+uniagent_tool_calls_created{result="ok",tool="get_x"} 1.7928400722323074e+09
+uniagent_tool_latency_seconds_bucket{le="0.005",tool="get_x"} 1.0
+uniagent_tool_latency_seconds_bucket{le="0.01",tool="get_x"} 1.0
+uniagent_tool_latency_seconds_bucket{le="0.05",tool="get_x"} 1.0
+uniagent_tool_latency_seconds_bucket{le="0.1",tool="get_x"} 1.0
+uniagent_tool_latency_seconds_bucket{le="0.25",tool="get_x"} 1.0
+uniagent_tool_latency_seconds_bucket{le="0.5",tool="get_x"} 1.0
+uniagent_tool_latency_seconds_bucket{le="1.0",tool="get_x"} 1.0
+uniagent_tool_latency_seconds_bucket{le="2.5",tool="get_x"} 1.0
+uniagent_tool_latency_seconds_bucket{le="5.0",tool="get_x"} 1.0
+uniagent_tool_latency_seconds_bucket{le="10.0",tool="get_x"} 1.0
+
+================================================================
+[6] 证据文件索引
+================================================================
+  OK  docs/evidence/real_device_e2e_20261024.txt
+  OK  docs/evidence/firmware_build_flash_20261024.txt
+  OK  docs/evidence/esp32_simulator_e2e_20261004.txt
+  OK  docs/evidence/p0p1_security_batch_20261004.txt
+
+生成时间: 2026-10-24 19:07:52
+
+================================================================
+[补1] 全量测试准确尾行（复跑）
+================================================================
+261 passed in 41.61s
+
+================================================================
+[补2] GitHub CI 快照（公开 API）
+================================================================
+
+
+================================================================
+[补3] 桌面档本地构建状态（如实）
+================================================================
+Rust 1.99.1 已装；cargo build 依赖拉取/编译正常，终止于 error: linker `link.exe` not found（缺 MSVC Build Tools，需管理员安装）。
+结论维持三态表：桌面档 = 脚手架 / CI 就绪，不宣称完成。
+
+补记时间: 2026-10-24 19:12:25

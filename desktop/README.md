@@ -4,6 +4,12 @@ v2.0 §3.2/§四 的桌面形态。**本目录为脚手架**：本地无 Rust �
 由 CI（`.github/workflows/desktop-build.yml`，手动触发）产出安装包；浏览器档
 （Dashboard :18080 + SPA）始终是保底交付形态。
 
+> **本地构建状态（2026-10-24 实测）**：Rust 1.99.1 已安装、crates 依赖可正常拉取编译，
+> 唯一缺口是 **MSVC Build Tools（link.exe）** —— 需管理员权限安装：
+> `winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --quiet --norestart"`
+> （或 Visual Studio Installer 勾选"使用 C++ 的桌面开发"）。装完后在本目录
+> `cargo build --release` 即可完成本地构建验证。
+
 ## 结构
 
 ```
