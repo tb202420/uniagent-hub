@@ -205,3 +205,15 @@ uniagent-hub/
 | [docs/defense_script.md](docs/defense_script.md) | 答辩讲稿（逐页口播 + 15 秒电梯陈述 + 13 题问答库 + 演示衔接） |
 | [docs/答辩PPT.pptx](docs/答辩PPT.pptx) | 答辩演示文稿 14 页（与讲稿 P1-P14、演示脚本七幕对齐） |
 | docs/design/ · docs/test-reports/ · docs/evidence/ | 各阶段设计 / 测试报告 / 过程证据 |
+
+## v2.0 能力（2026-10-24 补全批次）
+
+| 能力 | 用法 |
+|---|---|
+| Agent 插件宿主 | `python -m agent.plugins list` / `run --agent script --goal "土壤低于30%就浇300秒"`（内置 script/ollama/openai-compat，支持 entry_points 第三方插件） |
+| 短期 JWT 令牌 | `HUB_AUTH_MODE=jwt` + `HUB_JWT_SECRET`；`python -m scripts.issue_token --caller demo --perm write`（10 分钟时效，tools 可绑定） |
+| 工作流并行分支 | 蓝图声明 `parallel: true`（拓扑层并发，默认串行口径不变）；表达式支持 `cond ? a : b` 三元；DAG 深度上限 20 |
+| 执行事件流 | `GET /workflows/events?since=<seq>`（SPA 进度卡片数据源） |
+| Prometheus 指标 | `GET /metrics`（uniagent_tool_calls_total / guard_blocked_total / tool_latency_seconds / workflow_runs_total） |
+| 场景模板 | `core/workflow/scenes.yaml`（5 个预置场景；SPA 简易模式一键执行 + 写操作确认卡片） |
+| 桌面档 | `desktop/`（Tauri 2 外壳 + PyInstaller sidecar 脚手架；Actions 手动触发 Desktop Build） |

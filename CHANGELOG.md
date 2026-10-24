@@ -8,6 +8,20 @@
 
 ### 新增
 - 开源治理文件：LICENSE（Apache-2.0）/ CONTRIBUTING / SECURITY / 本文件
+- **v2.0 补全批次（2026-10-24 第二批）**：
+  - Agent 插件宿主：AgentAdapter 统一接口 + `uniagent_hub.agent_adapters` entry_points
+    发现；内置 script（确定性规则意图解析）/ ollama（原生 tool_calls 串行闭环，
+    温度 0）/ openai-compat（DeepSeek 等兼容端点）三插件；CLI `python -m agent.plugins`
+  - 短期 JWT 令牌（§3.6）：HUB_AUTH_MODE=jwt，HS256、10 分钟过期、绑定 caller/perm/tools、
+    禁止会话认证；自研网关与 FastMCP 前端同语义；签发 CLI scripts/issue_token.py
+  - 工作流引擎 v2.0：蓝图级 parallel 并行分支（拓扑层并发，默认串行口径不变）、
+    三元表达式 `cond ? a : b`、DAG 最长路径深度上限 20、执行事件流 /workflows/events
+  - 可观测：/metrics Prometheus 端点（调用/拦截/延迟/工作流四组指标，软依赖降级）
+  - 场景模板 scenes.yaml（5 个）+ SPA 简易模式（一键场景卡片、写操作确认卡片、
+    事件进度 chips、ELK 自动布局带手工回落、简易/专家双模切换）
+  - 桌面档脚手架 desktop/（Tauri 2 最小外壳 + capabilities 最小权限 +
+    PyInstaller sidecar spec + Actions Desktop Build 手动工作流）
+  - CI 强化：pip-audit（advisory）与 CodeQL（周巡）工作流
 - **第 6 类适配器 WebSocket**（UniSpec v0.3.1 `websocket_stream`）：订阅缓存读 / 写发送 /
   断线指数退避重连；默认不加载（`HUB_WS_CONFIGS` 启用，演示档口径不变）；含真实回环集成测试
 - **React 管理控制台初版**（`web/spa`，React 19 + React Flow 12）：工具注册中心 / 工作流 DAG /

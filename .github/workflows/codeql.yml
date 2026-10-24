@@ -1,0 +1,23 @@
+name: CodeQL
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 20 * * 6"   # 每周六 04:00（本地时区偏移后）
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3

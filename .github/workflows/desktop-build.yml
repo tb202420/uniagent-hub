@@ -1,0 +1,48 @@
+name: Desktop Build
+
+# v2.0 §3.2：桌面档由 CI 构建（本地无需 Rust 工具链）。
+# 当前为脚手架阶段（desktop/ 提供最小 Tauri 工程与 sidecar spec），
+# 首次在有 Rust 环境校准后启用自动触发；现阶段手动触发验证链路。
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sidecar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build Hub sidecar (PyInstaller)
+        run: |
+          pip install -r requirements.txt pyinstaller
+          pyinstaller desktop/hub-sidecar.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uniagent-hub-sidecar-windows
+          path: dist/uniagent-hub/
+
+  tauri:
+    runs-on: windows-latest
+    continue-on-error: true   # 脚手架阶段：允许失败，不阻塞其它流水线
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build SPA (frontendDist)
+        working-directory: web/spa
+        run: |
+          npm ci
+          npm run build
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tauri build
+        working-directory: desktop/src-tauri
+        run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uniagent-hub-desktop-windows
+          path: desktop/src-tauri/target/release/*.exe

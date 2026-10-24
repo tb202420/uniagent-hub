@@ -56,3 +56,16 @@ jobs:
         run: |
           npm ci
           npm run build
+
+  # v2.0 §3.12 供应链审计（advisory：发现漏洞告警不红牌，人工评估后修复）
+  pip-audit:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit
+      - name: Audit runtime dependencies
+        run: pip-audit -r requirements.txt --progress-bar off

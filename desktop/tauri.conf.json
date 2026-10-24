@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "UniAgent Hub",
+  "version": "0.1.0",
+  "identifier": "uniagent.hub.desktop",
+  "build": {
+    "frontendDist": "../web/spa/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "UniAgent Hub 控制台",
+        "width": 1280,
+        "height": 820,
+        "url": "http://127.0.0.1:18080"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "externalBin": []
+  }
+}
