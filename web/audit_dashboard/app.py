@@ -57,7 +57,9 @@ def _html(title: str, body: str) -> str:
 <body><header><h1>UniAgent Hub · 审计中心</h1>
 <nav><a href="/" style="color:#fff;margin-right:12px">概览</a>
 <a href="/audit" style="color:#fff;margin-right:12px">审计日志</a>
-<a href="/workflows" style="color:#fff">工作流</a></nav></header>
+<a href="/workflows" style="color:#fff;margin-right:12px">工作流</a>
+<a href="/spa/" style="color:#fff;margin-right:12px">SPA 控制台</a>
+<a href="https://github.com/tb202420/uniagent-hub" style="color:#fff">GitHub</a></nav></header>
 <main>{body}</main></body></html>"""
 
 
@@ -102,6 +104,59 @@ def create_dashboard(hub_url: str = "http://127.0.0.1:8000",
             return resp.json().get("items", [])
         except Exception:
             return []
+
+    def _hub_workflow_defs() -> list[dict]:
+        try:
+            resp = httpx.get(f"{hub}/workflows/defs", timeout=5,
+                             headers=_hub_headers())
+            return resp.json().get("items", [])
+        except Exception:
+            return []
+
+    # ---- JSON API（SPA 数据源；沿用 Basic Auth 中间件与 HTML 页同一防线）----
+
+    @app.get("/api/stats")
+    def api_stats() -> dict:
+        stats = store.audit_stats()
+        return {**stats,
+                "blocked_by_error": store.audit_error_stats(),
+                "tools": len(_hub_tools())}
+
+    @app.get("/api/audit")
+    def api_audit(tool: str = "", caller: str = "", error_code: int = 0,
+                  limit: int = 100) -> dict:
+        rows = store.query_audit(tool=tool or None, caller=caller or None,
+                                 error_code=error_code or None, limit=limit)
+        return {"items": rows}
+
+    @app.get("/api/tools")
+    def api_tools() -> dict:
+        tools = _hub_tools()
+        return {"items": [{"name": t.get("name"), "title": t.get("title", ""),
+                           "description": t.get("description", ""),
+                           "readOnly": (t.get("annotations") or {}).get("readOnlyHint", False)}
+                          for t in tools]}
+
+    @app.get("/api/workflows")
+    def api_workflows() -> dict:
+        return {"items": _hub_workflows()}
+
+    @app.get("/api/workflow-defs")
+    def api_workflow_defs() -> dict:
+        return {"items": _hub_workflow_defs()}
+
+    @app.get("/api/audit/verify")
+    def api_audit_verify() -> dict:
+        """审计哈希链完整性校验（HUB_AUDIT_CHAIN=1 生效期间写入的记录）。"""
+        from core.guard.audit import read_jsonl, verify_chain
+        path = Path(os.environ.get(
+            "HUB_AUDIT_FILE",
+            str(Path(__file__).resolve().parents[2] / "data" / "audit.jsonl")))
+        if not path.exists():
+            return {"ok": True, "first_bad": None,
+                    "message": "无审计文件（尚未生成）"}
+        ok, first_bad, msg = verify_chain(read_jsonl(path))
+        return {"ok": ok, "first_bad": first_bad, "message": msg}
 
     def _hub_headers() -> dict:
         # 网关启用 Bearer Token（HUB_API_TOKEN）时，面板调用需携带同一凭据
@@ -182,5 +237,11 @@ def create_dashboard(hub_url: str = "http://127.0.0.1:8000",
             <table><tr><th>步骤</th><th>工具</th><th>状态</th><th>输出</th><th>延迟</th></tr>
             {steps_html}</table></div>"""
         return _html("工作流", f"<h2>最近工作流执行</h2>{cards}")
+
+    # React SPA（web/spa 构建产物存在时挂载；构建步骤见 web/spa/README.md）
+    spa_dist = Path(__file__).resolve().parents[2] / "web" / "spa" / "dist"
+    if spa_dist.exists():
+        from fastapi.staticfiles import StaticFiles
+        app.mount("/spa", StaticFiles(directory=spa_dist, html=True), name="spa")
 
     return app

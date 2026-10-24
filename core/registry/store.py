@@ -199,6 +199,15 @@ class SQLiteStore:
         return {"total": row["total"], "ok": row["ok_count"],
                 "avg_latency": float(row["avg_latency"])}
 
+    def audit_error_stats(self) -> list[dict[str, Any]]:
+        """被拦截/失败调用按错误码聚合（安全中心页面数据源）。"""
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT error_code, COUNT(*) AS count
+                   FROM audit WHERE is_error=1 AND error_code > 0
+                   GROUP BY error_code ORDER BY count DESC""").fetchall()
+        return [{"error_code": r["error_code"], "count": r["count"]} for r in rows]
+
     def cleanup_audit(self) -> int:
         """清理超过 TTL 的审计记录（防膨胀）。返回删除行数。"""
         import datetime

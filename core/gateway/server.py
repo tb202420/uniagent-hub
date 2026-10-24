@@ -353,7 +353,7 @@ def create_app(registry: ToolRegistry, audit: AuditLogger | None = None,
 
     @app.middleware("http")
     async def bearer_auth(request: Request, call_next):
-        if api_token and request.url.path in ("/mcp", "/workflows/recent"):
+        if api_token and request.url.path in ("/mcp", "/workflows/recent", "/workflows/defs"):
             header = request.headers.get("authorization", "")
             if not secrets.compare_digest(header, f"Bearer {api_token}"):
                 return JSONResponse(
@@ -377,6 +377,21 @@ def create_app(registry: ToolRegistry, audit: AuditLogger | None = None,
         if gateway.workflow is None:
             return {"items": []}
         return {"items": gateway.workflow.recent()}
+
+    @app.get("/workflows/defs")
+    def workflows_defs() -> dict[str, Any]:
+        """全部工作流蓝图的结构定义（SPA 工作流可视化数据源；与 recent 同受 Bearer 保护）。"""
+        if gateway.workflow is None:
+            return {"items": []}
+        items = []
+        for name, blueprint in getattr(gateway.workflow, "workflows", {}).items():
+            steps = [
+                {"id": s.get("id"), "tool": s.get("tool"),
+                 "depends_on": list(s.get("depends_on") or []),
+                 "condition": s.get("condition")}
+                for s in (blueprint.get("steps") or [])]
+            items.append({"name": name, "steps": steps})
+        return {"items": items}
 
     @app.post("/mcp")
     async def mcp(request: Request) -> JSONResponse:
