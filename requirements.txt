@@ -12,3 +12,5 @@ httpx==0.28.1
 fastmcp==4.0.10
 # Ed25519 工具清单签名（HUB_ATTESTATION_KEY；见 core/guard/attestation.py）
 cryptography==50.0.2
+# WebSocket 适配器（第 6 类，UniSpec v0.3.1；默认不加载，HUB_WS_CONFIGS 启用；惰性导入）
+websockets==15.0.1

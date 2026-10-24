@@ -267,10 +267,10 @@ Hub 订阅 `{prefix}/register/+` 与 `{prefix}/devices/+/state`，收到注册�
   "required": ["id", "type", "name", "protocol", "capabilities"],
   "properties": {
     "id": { "type": "string", "pattern": "^[a-z][a-z0-9_.-]*$" },
-    "type": { "enum": ["iot_device", "cli_tool", "rest_api", "local_script", "database"] },
+    "type": { "enum": ["iot_device", "cli_tool", "rest_api", "local_script", "database", "websocket_stream"] },
     "name": { "type": "string" },
     "description": { "type": "string" },
-    "protocol": { "enum": ["mqtt", "http", "subprocess", "script", "stdio", "sqlite"] },
+    "protocol": { "enum": ["mqtt", "http", "subprocess", "script", "stdio", "sqlite", "websocket"] },
     "endpoint": { "type": "object" },
     "capabilities": {
       "type": "array",
@@ -339,3 +339,6 @@ Hub 订阅 `{prefix}/register/+` 与 `{prefix}/devices/+/state`，收到注册�
 ### v0.1（2026-09-25，阶段 0 冻结）
 
 初次冻结：顶层结构、四类 endpoint 约定、capability、constraints、CLI 模板占位符、设备发现协议、JSON Schema。
+
+
+> **v0.3.1 增量（2026-10-24）**：新增第 6 类资源 `websocket_stream`（protocol `websocket`），对应 WebSocket 适配器（订阅推送 / 发送）。枚举扩展为**向后兼容的增量变更**——既有五类资源的描述与校验行为不变。

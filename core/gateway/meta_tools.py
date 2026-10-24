@@ -29,6 +29,7 @@ _DOMAIN_DESC = {
     "script": "本地脚本（路径沙箱）",
     "database": "数据库（SQLite 只读查询 / 受限写）",
     "workflow": "工作流编排（预定义蓝图）",
+    "websocket": "WebSocket 流（订阅推送 / 发送）",
 }
 _TYPE_DOMAIN = {
     "iot_device": "iot",
@@ -36,6 +37,7 @@ _TYPE_DOMAIN = {
     "rest_api": "rest",
     "local_script": "script",
     "database": "database",
+    "websocket_stream": "websocket",
 }
 _META_NAMES = ("discover_tools", "get_tool_schema", "execute_tool", "refresh_registry")
 

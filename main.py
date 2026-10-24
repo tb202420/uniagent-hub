@@ -30,6 +30,7 @@ from adapters.database_adapter.adapter import DatabaseAdapter
 from adapters.mqtt_adapter.adapter import MQTTAdapter
 from adapters.rest_adapter.adapter import RESTAdapter
 from adapters.script_adapter.adapter import ScriptAdapter
+from adapters.websocket_adapter.adapter import WebSocketAdapter
 from core.adapters.plugins import (
     adapter_shutdown, adapter_startup, load_adapter_plugins,
 )
@@ -98,7 +99,8 @@ def build_hub(broker: str, cli_configs: list[Path],
               db_config: Path | None = None,
               db_path: Path | None = None,
               meta_tools: bool = False,
-              plugins: bool = True) -> HubRuntime:
+              plugins: bool = True,
+              ws_configs: list[Path] | None = None) -> HubRuntime:
     # SQLite 持久化：工具 + 审计（HUB_DB 可切换到独立档位，如硬件测试库）
     store = SQLiteStore(db_path or (HERE / "data" / "uniagent.db"))
     registry = ToolRegistry(store)
@@ -135,6 +137,13 @@ def build_hub(broker: str, cli_configs: list[Path],
         adapter = DatabaseAdapter(registry, config_path=db_config)
         adapter.discover()
         adapters.append(("database", adapter))
+
+    # WebSocket 适配器（第 6 类，UniSpec v0.3.1）：**默认不加载**（演示档 14 工具
+    # 口径不变）；HUB_WS_CONFIGS 显式启用（分号分隔多份配置，同 HUB_SCRIPT_CONFIGS）
+    for cfg in ws_configs or []:
+        adapter = WebSocketAdapter(registry, config_path=cfg)
+        adapter.discover()
+        adapters.append(("websocket", adapter))
 
     # 工作流引擎（与网关互引：引擎经网关执行每步，Guard/审计不旁路）
     limiter = RateLimiter()
@@ -215,6 +224,8 @@ def main() -> None:
     rest_base_url = os.environ.get("HUB_REST_BASE_URL_OVERRIDE", "").strip() or None
     script_configs = None if args.no_script else _config_list(
         "HUB_SCRIPT_CONFIGS", HERE / "adapters/script_adapter/configs/scripts.yaml")
+    # 第 6 类适配器：默认不加载（演示档口径不变），HUB_WS_CONFIGS 显式启用
+    ws_configs = _config_list("HUB_WS_CONFIGS", None) if os.environ.get("HUB_WS_CONFIGS") else None
     cli_configs = _config_list(
         "HUB_CLI_CONFIGS", HERE / "adapters/cli_adapter/configs/cli_tools.yaml")
     # B9：数据库适配器默认启用；--no-db 或环境变量 HUB_DISABLE_DB=1 关闭
@@ -229,7 +240,7 @@ def main() -> None:
     runtime = build_hub(broker, cli_configs, rest_specs=rest_specs,
                         script_configs=script_configs, rest_base_url=rest_base_url,
                         db_config=db_cfg, db_path=db_path, meta_tools=meta_on,
-                        plugins=not args.no_plugins)
+                        plugins=not args.no_plugins, ws_configs=ws_configs)
 
     try:
         if args.gateway == "fastmcp":

@@ -15,8 +15,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # ---- 枚举约束（与 docs/unispec.md §9 保持一致）----
 
 # v0.3.0（B9 修复批次）新增 "database"/"sqlite"：第五类资源（数据库）
-ResourceType = Literal["iot_device", "cli_tool", "rest_api", "local_script", "database"]
-ProtocolType = Literal["mqtt", "http", "subprocess", "script", "stdio", "sqlite"]
+# v0.3.1（2026-10-24，第 6 类适配器批次）新增 "websocket_stream"/"websocket"：WebSocket 流资源（增量扩展，向后兼容）
+ResourceType = Literal["iot_device", "cli_tool", "rest_api", "local_script", "database", "websocket_stream"]
+ProtocolType = Literal["mqtt", "http", "subprocess", "script", "stdio", "sqlite", "websocket"]
 PermissionLevel = Literal["read", "write", "admin"]
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
@@ -131,6 +132,7 @@ class UniSpec(BaseModel):
             "rest_api": "http",
             "local_script": "script",
             "database": "sqlite",
+            "websocket_stream": "websocket",
         }
         want = expected[self.type]
         if self.protocol != want:

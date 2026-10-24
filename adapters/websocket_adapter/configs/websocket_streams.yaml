@@ -1,0 +1,38 @@
+# WebSocket 流资源示例配置（第 6 类适配器；默认不加载，需 HUB_WS_CONFIGS 显式启用）
+#
+#   HUB_WS_CONFIGS=adapters/websocket_adapter/configs/websocket_streams.yaml python main.py
+#
+# 演示流服务端：python -m scripts.dev_ws_stream --port 8765
+#   （周期推送 {clock, temperature} JSON 帧，并回显收到的写消息）
+
+streams:
+  - id: ws.demo.telemetry
+    name: 演示遥测流
+    description: 本地 WebSocket 遥测流（时钟 + 温度），用于验证第 6 类适配器
+    url: ws://127.0.0.1:8765
+    capabilities:
+      - name: get_stream_clock
+        description: 读取遥测流最新一帧的 clock 字段（UTC 时间戳）
+        inputSchema: {type: object, properties: {}}
+        outputSchema: {type: string}
+        readOnly: true
+        stateField: clock
+      - name: get_stream_temperature
+        description: 读取遥测流最新一帧的 temperature 字段（摄氏度）
+        inputSchema: {type: object, properties: {}}
+        outputSchema: {type: number}
+        readOnly: true
+        stateField: temperature
+      - name: stream_send
+        description: 向遥测流发送 JSON 消息（write 级）
+        inputSchema:
+          type: object
+          properties:
+            message: {type: string, description: 要发送的消息文本}
+          required: [message]
+        readOnly: false
+    constraints:
+      readOnly: false
+      permissionLevel: write
+      rateLimit: 5/s
+      timeout: 5s
