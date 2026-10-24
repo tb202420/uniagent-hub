@@ -3,3 +3,5 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+# 真实凭据不入库（WiFi/MQTT）；仓库保留占位默认值
+src/secrets.h

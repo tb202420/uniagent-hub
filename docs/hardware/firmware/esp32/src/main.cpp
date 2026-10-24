@@ -39,11 +39,24 @@
 #include <esp_task_wdt.h>
 
 // ========================== 用户配置区（按实际修改） ==========================
-#define WIFI_SSID        "YOUR_WIFI_SSID"        // TODO: 填写 WiFi 名称
-#define WIFI_PASS        "YOUR_WIFI_PASSWORD"    // TODO: 填写 WiFi 密码
+// 真实凭据放 src/secrets.h（已被 .gitignore 排除，不入库）；
+// 无该文件时使用下方占位默认值 —— 便于开源用户克隆即编译。
+#if __has_include("secrets.h")
+#include "secrets.h"
+#endif
 
+#ifndef WIFI_SSID
+#define WIFI_SSID        "YOUR_WIFI_SSID"        // TODO: 填写 WiFi 名称
+#endif
+#ifndef WIFI_PASS
+#define WIFI_PASS        "YOUR_WIFI_PASSWORD"    // TODO: 填写 WiFi 密码
+#endif
+#ifndef MQTT_HOST
 #define MQTT_HOST        "192.168.1.100"         // Hub 所在网络可达的 broker（局域网=PC 内网 IP；公网可用 broker.emqx.io）
+#endif
+#ifndef MQTT_PORT
 #define MQTT_PORT        1883                    // 明文端口（TLS 模式自动用 8883）
+#endif
 #define MQTT_TLS         0                       // 1 = MQTT over TLS（需在 kRootCA 粘贴完整 CA PEM）
 #define MQTT_CLIENT_ID   "esp32_irrigation_01"
 

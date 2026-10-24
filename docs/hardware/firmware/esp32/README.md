@@ -13,12 +13,15 @@
 | BH1750 光照 | I2C：SDA=GPIO8 / SCL=GPIO9 | 地址 0x23 |
 | 继电器（水泵） | GPIO10（IN） | 默认高电平吸合（`RELAY_ACTIVE_HIGH` 可反） |
 
-## 烧录三步
+## 烧录三步（凭据放 `src/secrets.h`，不入库）
 
 ```bash
-# 1) 填写 src/main.cpp 顶部：WIFI_SSID / WIFI_PASS / MQTT_HOST（Hub 所在网络可达的 broker；
-#    本地联调推荐 PC 上起本地 broker：python -m scripts.dev_mqtt_broker --port 1883，
-#    MQTT_HOST 填 PC 内网 IP）
+# 1) 创建 src/secrets.h（参照下方模板；该文件已被 .gitignore 排除）：
+#      #define WIFI_SSID  "你的WiFi名"
+#      #define WIFI_PASS  "你的WiFi密码"
+#      #define MQTT_HOST  "192.168.5.21"     # broker 所在机器（本地联调=PC 内网 IP）
+#      #define MQTT_PORT  1883
+#    无 secrets.h 时使用 main.cpp 内占位默认值，克隆即编译
 # 2) 编译 + 烧录（PIO CLI；或 VSCode PlatformIO 的 Upload 按钮）
 pio run -d docs/hardware/firmware/esp32 -t upload
 # 3) 串口监视（115200）
@@ -26,6 +29,22 @@ pio device monitor -d docs/hardware/firmware/esp32
 ```
 
 编译实测（2026-10-24）：ArduinoJson 7.4.3 + PubSubClient 2.8.0，RAM 15.2% / Flash 24.4%。
+真机联调实测（2026-10-24，`docs/evidence/real_device_e2e_20261024.txt`）：
+自动发现 retain 注册 ✓ / 命令→回执 avg 152ms / 自动停泵 5.1s 精确自停 /
+经 Hub Guard 全链路 100ms / 审计含 schema_hash。
+
+## 硬件成本表（低成本可复制）
+
+| 部件 | 参考价（元） |
+|---|---|
+| ESP32-S3-DevKitC-1 | ~35 |
+| DHT22 温湿度模块 | ~10 |
+| BH1750 光照模块 | ~8 |
+| 电容土壤湿度探头 | ~8 |
+| 5V 继电器模块 | ~6 |
+| 微型水泵 + 硅胶管 | ~15 |
+| USB 电源/线材/面包板 | ~10 |
+| **合计** | **约 92**（研究报告口径 80–130 元一致） |
 
 ## 验收清单（规划里程碑 1：MQTTX 能看到三个 topic）
 

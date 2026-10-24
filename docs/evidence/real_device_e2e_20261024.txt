@@ -1,0 +1,51 @@
+ESP32-S3 真机端到端联调实测记录（2026-10-24 · 比赛证据）
+================================================================
+
+环境
+  Windows 11 PC（同时充当 MQTT broker 宿主，IP 192.168.5.21，防火墙未拦截 LAN 入站）
+  本地 broker：python -m scripts.dev_mqtt_broker --port 1883（amqtt，监听 0.0.0.0）
+  真机：ESP32-S3-DevKitC-1（COM5，FTDI 串口），固件 docs/hardware/firmware/esp32
+  WiFi：ZTE-****（真实 SSID 已脱敏；凭据经 src/secrets.h 注入，不入版本库）
+  传感器状态：本轮测试时 DHT22 / BH1750 / 土壤探头未接线（读数段落如实标注）
+
+[1] 烧录后串口（pyserial 直读，完整启动链）
+    [esp32_irrigation] 连接 WiFi ZTE-****
+    [esp32_irrigation] WiFi 断线，重连…          ← 首次异步关联的预期中间态
+    [esp32_irrigation] MQTT 已连接 192.168.5.21
+    [esp32_irrigation] UniSpec 注册(retain,ok) -> uniagent-hub-rxyc/register/irrigation_01
+    [esp32_irrigation] 已订阅 uniagent-hub-rxyc/devices/irrigation_01/command
+
+[2] 端到端功能与时延（scripts/real_device_e2e.py，--rounds 5 --duration 5）
+    B. retain UniSpec 抓取：id=iot.irrigation_01，
+       capabilities=[get_soil_moisture, get_light_intensity, control_pump]，endpoint 三 topic 完整
+    A. 命令往返：成功 5/5
+       命令→回执时延：min=100ms avg=152ms max=209ms（含 MQTT QoS1 往返与设备执行）
+    A2. 自动停泵：开泵回执 ok；到点自停 ok —— 自停帧晚于回执 5.1s 到达（duration=5s，契约精确）
+    D. 30s 周期帧：ts 已 NTP 同步；未接线传感器优雅降级
+       （DHT22/BH1750 字段缺省，ADC 悬空读数 soil=100 —— 接线后即为真实读数）
+
+[3] Hub 全链路（真机 → MQTT → Hub → Guard → 执行器 → 回执 → 审计）
+    Hub 以隔离库启动（HUB_DB=data/realdev_e2e.db，无任何模拟器在场）：
+    - tools/list：10 个工具，其中 get_soil_moisture / get_light_intensity /
+      control_pump 全部来自真机（retain 注册自动发现，平台侧零配置）
+    - tools/call control_pump {action:on, duration:5}（write 级，经 Guard 管道）：
+      isError=false，返回设备回执帧（pump=on, request_id=real-hub-1 与调用
+      trace_id 一致），端到端 latency_ms=100
+    - tools/call get_soil_moisture：isError=false，0ms（状态缓存路径）
+    - 审计落盘（data/realdev_e2e_audit.jsonl）：
+      ('real-hub-1','control_pump','passed', schema_hash=f29ccd6bc1…)
+      ('real-hub-2','get_soil_moisture','passed', schema_hash=46404954de…)
+      —— 真机工具调用同样携带 Schema 内容哈希（工具投毒防护追溯生效）
+
+[4] 参赛证据清单对照（docs/参赛指导.txt 第六节）
+    1) 端到端功能测试：本轮 5/5、avg 152ms；`--rounds 20` 可复跑扩到 20 次（脚本已入库）
+    3) 安全测试：拦截率 100% 见 p0p1_security_batch_20261004.txt 与 216 项测试
+    4) 断网/重连：WiFi 断线重连、MQTT 指数退避已在固件实现并在[1]中体现；
+       broker 重启重连计时可用 `python -m scripts.real_device_e2e --restart-broker` 采集
+    2) 节水对比 / 5) 24-72h 长稳 / 7) 实物照片：待传感器接线与人工拍摄后补
+
+复现命令
+    python -m scripts.dev_mqtt_broker --port 1883          # 终端 A
+    python -m scripts.real_device_e2e --rounds 20          # 终端 B（真机上电后）
+    set HUB_MQTT_BROKER=mqtt://192.168.5.21:1883 && set HUB_DB=data/realdev_e2e.db ^
+      && set HUB_AUDIT_FILE=data/realdev_e2e_audit.jsonl && python main.py --port 8020
