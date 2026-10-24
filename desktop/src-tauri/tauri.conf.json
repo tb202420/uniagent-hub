@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "uniagent.hub.desktop",
   "build": {
-    "frontendDist": "../web/spa/dist"
+    "frontendDist": "../../web/spa/dist"
   },
   "app": {
     "windows": [

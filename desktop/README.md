@@ -4,18 +4,26 @@ v2.0 §3.2/§四 的桌面形态。**本目录为脚手架**：本地无 Rust �
 由 CI（`.github/workflows/desktop-build.yml`，手动触发）产出安装包；浏览器档
 （Dashboard :18080 + SPA）始终是保底交付形态。
 
-> **本地构建状态（2026-10-24 实测）**：Rust 1.99.1 已安装、crates 依赖可正常拉取编译，
-> 唯一缺口是 **MSVC Build Tools（link.exe）** —— 需管理员权限安装：
-> `winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --quiet --norestart"`
-> （或 Visual Studio Installer 勾选"使用 C++ 的桌面开发"）。装完后在本目录
-> `cargo build --release` 即可完成本地构建验证。
+> **本地构建状态（2026-10-24 实测：✅ 编译通过）**：Rust 1.99.1 + VS Build Tools 2022
+> （MSVC 14.44 / Win SDK 10.0.26100），`desktop/build-local.cmd` 一键构建，
+> `cargo build --release` **16.6 秒**完成，产物
+> `src-tauri/target/release/uniagent-hub-desktop.exe`（9.4MB，release 优化档）。
+>
+> 已知环境坑（已在本仓库解决）：winget 安装 Build Tools 后 vswhere 未注册实例，
+> rustc 找不到 link.exe —— `build-local.cmd` 通过直接注入 MSVC/SDK 的
+> PATH/LIB/INCLUDE 绕过 vswhere。图标由 `src-tauri/icons/icon.ico` 提供
+>（Windows 资源必需）。**未做**：NSIS 安装包打包与窗口运行实测（CI Desktop Build
+> 产出安装包）—— 三态口径维持"外壳已编译验证，不宣称桌面版完成"。
 
 ## 结构
 
 ```
 desktop/
-  tauri.conf.json        Tauri 2 配置（窗口加载 http://127.0.0.1:18080）
-  src-tauri/             Rust 外壳（最小实现：单窗口 WebView）
+  build-local.cmd        一键本地构建（注入 MSVC 环境，绕过 vswhere 坑）
+  src-tauri/
+    tauri.conf.json      Tauri 2 配置（窗口加载 http://127.0.0.1:18080）
+    icons/icon.ico       应用图标（Windows 资源必需）
+    ...                  Rust 外壳（最小实现：单窗口 WebView）
     Cargo.toml
     src/main.rs
     capabilities/default.json

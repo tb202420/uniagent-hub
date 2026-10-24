@@ -511,3 +511,14 @@ python -m adapters.mqtt_adapter.sim_esp32_greenhouse --broker mqtt://127.0.0.1:1
 
 学校确认**本届**通知/组别/名额/截止（上届文号不套用）；2 分钟视频；查新 12 条；查重；盖章；
 文件夹命名按本届要求。Rust/Tauri 本地构建见 desktop/README 状态更新。
+
+
+### 16.4 桌面档本地编译通过（2026-10-24 晚，材料收口批次补充）
+
+用户以管理员安装 VS Build Tools 2022（MSVC 14.44 / Win SDK 10.0.26100）后，
+Tauri 2 外壳本地编译打通：`desktop/build-local.cmd`（注入 MSVC 环境绕过
+winget 未注册 vswhere 实例的坑）→ `cargo build --release` 16.6s →
+`uniagent-hub-desktop.exe` 9.4MB。过程修复两处脚手架问题：tauri.conf.json
+需位于 src-tauri/ 内（frontendDist 相对路径 ../../web/spa/dist）、Windows
+资源必需 icons/icon.ico（System.Drawing 生成本项目色 64×64 图标）。
+**口径不变**：外壳编译验证 ≠ 桌面版完成；NSIS 打包与窗口运行实测仍未做（CI 路径）。

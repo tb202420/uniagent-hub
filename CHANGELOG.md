@@ -15,6 +15,10 @@
   答辩讲稿升级 261 口播 + 材料收口六题必练问答；dev_log 补 §15/§16；
   增强证据包 v20_enhancement_batch_20261024.txt（插件清单 / JWT 三态 / 并行 3 轮对比 /
   metrics 采样 / CI 快照 / 桌面档 linker 状态如实记录）
+- **桌面档外壳本地编译打通（同日补充）**：VS Build Tools 就位后，build-local.cmd
+  注入 MSVC 环境绕过 winget 未注册 vswhere 实例的坑，cargo release 16.6s 编译通过
+  （9.4MB exe）；修复 tauri.conf.json 位置与 icon.ico 缺失两处脚手架问题；
+  口径仍为"外壳已编译验证"，NSIS 打包与运行实测未做
 - **v2.0 补全批次（2026-10-24 第二批）**：
   - Agent 插件宿主：AgentAdapter 统一接口 + `uniagent_hub.agent_adapters` entry_points
     发现；内置 script（确定性规则意图解析）/ ollama（原生 tool_calls 串行闭环，
