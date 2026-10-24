@@ -301,3 +301,17 @@ python generated_cli\gen_get_temperature.py
 | 公共 broker 抖动 | 改用 `-Offline` 重启（本地 amqtt + Mock API）；温室模拟器同步切到本地 broker 后重录该段 |
 | 端口被占用 | 启动脚本会直接报出占用端口与查看命令；关闭占用进程或改用 `-Port 8030` |
 | 整机故障 | 播放 `demo_fallback/01_full_demo.mp4` |
+
+
+## 附：2 分钟参赛视频取材表（demo_script + 彩排记录直接复用）
+
+| 时间轴 | 内容 | 取材来源 |
+|---|---|---|
+| 0:00–0:20 | 痛点 + 方案一句话 | PPT P1–P2 口播稿（30 秒版压缩） |
+| 0:20–0:50 | 真机演示：Hub 启动 → tools/list 出现温室工具 → 查土壤湿度 | demo_script 第二幕；真机 e2e 证据脚本可复跑 |
+| 0:50–1:20 | 工作流闭环：smart_irrigation 一键执行 → 进度 → 回执 | demo_script 第四幕 + SPA 简易模式场景卡片（写确认弹窗入镜） |
+| 1:20–1:40 | 安全：注入字符串被 1007 拦截 + 越权 1003 + 审计面板红色高亮 | demo_script 第五幕 + Dashboard 安全中心页 |
+| 1:40–2:00 | 数据收口：22 工具/261 测试/拦截 100%/真机 152ms + 边界一句话 | PPT P10 + 口径速查表 §6.3（SIL/HIL 区分） |
+
+拍摄提示：`scripts/demo_start.ps1` 一键起全栈；安全拦截段落可直接复用彩排记录
+（docs/evidence/demo_rehearsal_*.txt）的命令序列；断网场景用 `-Offline`。
