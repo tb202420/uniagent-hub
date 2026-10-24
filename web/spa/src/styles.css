@@ -46,3 +46,36 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .flow { height: 340px; border: 1px solid var(--line); border-radius: 10px;
   margin-bottom: 14px; background: var(--panel); }
 h3 { margin: 18px 0 8px; }
+/* ---- v2.0 简易模式 ---- */
+button.mode { background: transparent; color: var(--accent);
+  border: 1px solid var(--accent); }
+button.ghost { background: transparent; color: var(--text);
+  border: 1px solid var(--line); }
+.cards-wide { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px; margin: 10px 0; }
+.scene { display: flex; gap: 14px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+  cursor: pointer; }
+.scene:hover { border-color: var(--accent); }
+.scene.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.scene .icon { font-size: 26px; }
+.scene p { margin: 4px 0 6px; font-size: 12.5px; }
+.panel { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 14px 18px; margin-top: 10px; }
+.panel .bar label { display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; color: var(--muted); }
+.modal { position: fixed; inset: 0; background: rgba(4, 12, 18, .66);
+  display: flex; align-items: center; justify-content: center; z-index: 50; }
+.modal-box { background: var(--panel); border: 1px solid var(--accent);
+  border-radius: 12px; padding: 20px 26px; max-width: 440px; }
+.modal-box h3 { margin-top: 0; }
+.steps { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.chip { border: 1px solid var(--line); border-radius: 14px; padding: 3px 12px;
+  font-size: 12px; }
+.chip.ok { border-color: var(--ok); color: var(--ok); }
+.chip.skipped { color: var(--muted); }
+.chip.error { border-color: var(--bad); color: var(--bad); }
+pre.okbox, pre.errbox { background: var(--bg); border-radius: 8px; padding: 12px;
+  font-size: 12px; overflow: auto; white-space: pre-wrap; }
+pre.okbox { border: 1px solid var(--ok); }
+pre.errbox { border: 1px solid var(--bad); }

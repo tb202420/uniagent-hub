@@ -145,6 +145,45 @@ def create_dashboard(hub_url: str = "http://127.0.0.1:8000",
     def api_workflow_defs() -> dict:
         return {"items": _hub_workflow_defs()}
 
+    # ---- v2.0 简易模式支撑：场景 / 一键执行 / 事件进度（均经 Hub，Guard 不旁路）----
+
+    @app.get("/api/scenes")
+    def api_scenes() -> dict:
+        try:
+            resp = httpx.get(f"{hub}/scenes", timeout=5, headers=_hub_headers())
+            return resp.json()
+        except Exception:
+            return {"items": []}
+
+    @app.post("/api/run-workflow")
+    async def api_run_workflow(body: dict) -> dict:
+        """简易模式一键场景：代理 run_workflow（写操作，前端已做确认卡片）。"""
+        payload = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                   "params": {"name": "run_workflow",
+                              "arguments": {"workflow": body.get("workflow", ""),
+                                            "params": body.get("params", {})},
+                              "caller": "spa:scene",
+                              "permission_level": "write",
+                              "trace_id": body.get("trace_id", "") or None}}
+        try:
+            resp = httpx.post(f"{hub}/mcp", json=payload, timeout=70,
+                              headers=_hub_headers())
+            return resp.json().get("result", {})
+        except Exception as e:  # noqa: BLE001
+            return {"isError": True,
+                    "content": [{"type": "text",
+                                 "text": f"Hub 不可达: {type(e).__name__}"}]}
+
+    @app.get("/api/workflow-events")
+    def api_workflow_events(since: int = 0) -> dict:
+        try:
+            resp = httpx.get(f"{hub}/workflows/events", timeout=5,
+                             params={"since": since},
+                             headers=_hub_headers())
+            return resp.json()
+        except Exception:
+            return {"items": []}
+
     @app.get("/api/audit/verify")
     def api_audit_verify() -> dict:
         """审计哈希链完整性校验（HUB_AUDIT_CHAIN=1 生效期间写入的记录）。"""
