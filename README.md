@@ -1,8 +1,13 @@
 # UniAgent Hub — 通用 AI Agent 工具集成平台
 
+![CI](https://github.com/tb202420/uniagent-hub/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/github/license/tb202420/uniagent-hub)
+![Python](https://img.shields.io/badge/python-3.12%20%7C%203.14-blue)
+![Tests](https://img.shields.io/badge/tests-261%20passed-brightgreen)
+
 > **AI 世界的 USB-C 接口**：无论背后是传感器、命令行工具还是云服务，插上来就能用。
 >
-> 科创比赛参赛项目 · 阶段 0-3 已完成（**216 项测试全部通过** · 工具全量 22 个（软件档 11 + 硬件档 8 + 温室模拟节点 3）/ 演示档 14 个 · **6 类适配器已实装**（第 6 类 WebSocket 2026-10-24 补全，默认档不加载） · 工作流闭环）·
+> 科创比赛参赛项目 · 阶段 0-3 已完成（**261 项测试全部通过**（定稿基线 216 + 增强批次 45，见 docs/口径速查表.md §6） · 工具全量 22 个（软件档 11 + 硬件档 8 + 温室模拟节点 3）/ 演示档 14 个 · **6 类适配器已实装**（第 6 类 WebSocket 2026-10-24 补全，默认档不加载） · 工作流闭环 · ESP32 真机端到端实测）·
 > 演示级就绪（一键启动 + 断网降级 + 3 次彩排 8/8 + 本地 LLM 接入）·
 > 改进方案第 1 批已落地（FastMCP 4 前端 / 元工具渐进发现 / 生命周期与插件 / Schema 签名与审计哈希链 / 硬件测试档）
 
