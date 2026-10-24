@@ -1,0 +1,39 @@
+ESP32-S3 温室固件 真机编译/烧录/启动 实测记录（2026-10-24）
+================================================================
+
+环境
+  Windows 11 · PlatformIO Core (penv) · board esp32-s3-devkitc-1
+  framework-arduinoespressif32 @ 4.20017.260907+sha.dcc1105b（此前手工装好）
+  lib_deps: ArduinoJson 7.4.3 / PubSubClient 2.8.0（registry 自动拉取）
+  串口: COM5（FTDI USB Serial Port, VID:PID=0403:6001, SER=A5069RR4A）
+
+[1] pio run 编译 → SUCCESS（Took 13.98 seconds）
+    RAM:   15.2% (used 49792 bytes from 327680 bytes)
+    Flash: 24.4% (used 814965 bytes from 3342336 bytes)
+    产物: .pio/build/esp32-s3-devkitc-1/firmware.bin
+    （注：首次编译报 tool-esptoolpy 缺 intelhex，penv pip install intelhex 后解决；
+     另修复一处 ENABLE_OTA 宏先于定义的 include 顺序问题）
+
+[2] pio run -t upload --upload-port COM5 → SUCCESS（Took 35.93 seconds）
+    Connecting... → Writing at 0x00000000/0x00008000/0x0000e000/0x00010000 (100%)
+    每段 Hash of data verified. → Leaving...
+
+[3] 串口实测（pyserial 直读 COM5 @115200，开 DTR 触发复位完整启动）：
+    ESP-ROM:esp32s3-20210327
+    Build:Mar 27 2021
+    rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+    ...
+    entry 0x403c98d0
+    [esp32_irrigation] 连接 WiFi YOUR_WIFI_SSID
+    [esp32_irrigation] WiFi 断线，重连…
+    [esp32_irrigation] WiFi 断线，重连…
+    （预期行为：WiFi 为占位符，重连循环 + 指数退避正常工作；中文日志正常输出）
+
+[4] 契约回归：tests/unit/test_firmware_contract.py 6 项通过
+    （固件内嵌 UniSpec 与模拟器 sim_esp32_greenhouse.UNISPEC 逐字段一致；
+     topic 三段、600s 钳位、request_id 回执、自动停泵实现齐备）
+
+待人工（联调里程碑 1）：
+  1. src/main.cpp 顶部填 WIFI_SSID / WIFI_PASS / MQTT_HOST（本地 broker=PC 内网 IP）
+  2. pio run -d docs/hardware/firmware/esp32 -t upload
+  3. 按 docs/hardware/firmware/esp32/README.md 验收清单用 MQTTX 核对三 topic

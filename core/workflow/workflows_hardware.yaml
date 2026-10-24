@@ -74,3 +74,41 @@ workflows:
         args: {action: "on", duration: 300}
         depends_on: [s1, s2]
         condition: "{{s1.output}} < 30"
+
+  # 灌溉策略 2：光照感知（白天光照充足才浇水，避免夜间灌溉霉变；Agent 演示脚本 2）
+  light_aware_irrigation:
+    description: 光照感知灌溉：土壤偏干 且 光照 > 500lux → 开泵 300s
+    steps:
+      - id: s1
+        tool: get_soil_moisture
+        args: {}
+      - id: s2
+        tool: get_light_intensity
+        args: {}
+        depends_on: [s1]
+      - id: s3
+        tool: control_pump
+        args: {action: "on", duration: 300}
+        depends_on: [s1, s2]
+        condition: "{{s1.output}} < 30 and {{s2.output}} > 500"
+
+  # 灌溉策略 3：三连干旱告警（连续 3 次采样均 < 20% 才开泵，降低单次误读触发；Agent 演示脚本 3）
+  dry_soil_alert_irrigation:
+    description: 三连干旱告警灌溉：连续 3 次土壤湿度 < 20% → 开泵 120s
+    steps:
+      - id: s1
+        tool: get_soil_moisture
+        args: {}
+      - id: s2
+        tool: get_soil_moisture
+        args: {}
+        depends_on: [s1]
+      - id: s3
+        tool: get_soil_moisture
+        args: {}
+        depends_on: [s2]
+      - id: s4
+        tool: control_pump
+        args: {action: "on", duration: 120}
+        depends_on: [s1, s2, s3]
+        condition: "{{s1.output}} < 20 and {{s2.output}} < 20 and {{s3.output}} < 20"
