@@ -1,0 +1,13 @@
+ESP32 桌面档 Tauri 2 外壳 · 本地编译复现记录（2026-10-24 夜，第二次复现）
+================================================================
+环境：Rust 1.99.1 stable-msvc + VS Build Tools 2022（MSVC 14.44.35207 / Win SDK 10.0.26100）
+复现命令：desktop/build-local.cmd（注入 MSVC PATH/LIB/INCLUDE，绕过 winget 未注册 vswhere 实例）
+
+[cargo build --release 输出尾段]
+Compiling uniagent-hub-desktop v0.1.0 (D:\projec_UniAgent Hub\desktop\src-tauri)
+    Finished `release` profile [optimized] target(s) in 16.61s
+
+[产物] D:\projec_UniAgent Hub\desktop\src-tauri\target\release\uniagent-hub-desktop.exe
+大小: 8.93 MB · 生成时间: 2026-10-24 21:46:57
+
+口径：外壳已本地编译验证（两次复现：16.58s / 16.61s）；NSIS 安装包打包与窗口运行实测未做。
