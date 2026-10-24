@@ -1,0 +1,42 @@
+# 场景模板（v2.0 §3.1）：简易模式"一键场景"卡片的声明式定义，与 WorkflowEngine 蓝图同构。
+# write: true 的场景在简易模式执行前需用户确认（渐进自主权：写入需确认）。
+scenes:
+  - id: greenhouse-irrigate
+    title: 智能灌溉
+    icon: 💧
+    description: 读取土壤湿度，低于阈值自动开泵浇水（默认 300 秒）
+    workflow: smart_irrigation
+    write: true
+    params: {duration: 300}
+
+  - id: light-aware-irrigate
+    title: 白天智能灌溉
+    icon: ☀️
+    description: 土壤偏干且光照充足（白天）才浇水，避免夜间灌溉
+    workflow: light_aware_irrigation
+    write: true
+    params: {}
+
+  - id: dry-alert-irrigate
+    title: 三连干旱告警灌溉
+    icon: 🚨
+    description: 连续 3 次采样土壤湿度都低于 20% 才开泵 120 秒（防单次误读）
+    workflow: dry_soil_alert_irrigation
+    write: true
+    params: {}
+
+  - id: office-cooling
+    title: 办公室降温
+    icon: 🌡️
+    description: 测温 + 查天气，超过 28°C 自动开空调降温 2 度
+    workflow: office_cooling
+    write: true
+    params: {}
+
+  - id: env-snapshot
+    title: 环境巡检（只读）
+    icon: 📋
+    description: 温度 + 天气 + 目录文件统计快照，不执行任何写操作
+    workflow: office_status
+    write: false
+    params: {dir: ".", ext: py}

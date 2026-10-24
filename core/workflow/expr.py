@@ -5,6 +5,7 @@
 - 算术: + - * / 与括号
 - 比较: == != < > <= >=
 - 逻辑: and / or / not
+- 条件: cond ? a : b（v2.0；右结合，括号内可用）
 引用（{{...}}）由调用方先替换为 Python repr（数字/字符串），
 本模块只解析"数字/字符串/运算符/括号"，无任何 Python eval。
 
@@ -30,9 +31,9 @@ _TOKEN_RE = re.compile(
     r"""
     (?P<num>[+-]?\d+(?:\.\d+)?)
   | (?P<str>'(?:[^'\\]|\\.)*')
-  | (?P<op>==|!=|<=|>=|and|or|not|\+|-|\*|/|\(|\)|[<>])
+  | (?P<op>==|!=|<=|>=|and|or|not|\+|-|\*|/|\(|\)|\?|:|[<>])
   | (?P<ws>\s+)
-  """,
+    """,
     re.VERBOSE,
 )
 
@@ -77,10 +78,23 @@ class _Parser:
     def parse(self) -> Any:
         if not self._tokens:
             raise ExprError("空表达式")
-        value = self._or()
+        value = self._ternary()
         if self._peek() is not None:
             raise ExprError(f"多余的 token: {self._peek()!r}")
         return value
+
+    def _ternary(self) -> Any:
+        """条件表达式：cond ? a : b（v2.0 工作流引擎；右结合）。"""
+        cond = self._or()
+        if self._peek() and self._peek()[1] == "?":
+            self._next()
+            then_v = self._ternary()
+            colon = self._next()
+            if colon[1] != ":":
+                raise ExprError("三元表达式缺少 ':'")
+            else_v = self._ternary()
+            return then_v if bool(cond) else else_v
+        return cond
 
     def _or(self) -> Any:
         left = self._and()
@@ -148,7 +162,7 @@ class _Parser:
             raise ExprError("表达式意外结束")
         if t[1] == "(":
             self._next()
-            v = self._or()
+            v = self._ternary()
             close = self._next()
             if close[1] != ")":
                 raise ExprError("缺少右括号")

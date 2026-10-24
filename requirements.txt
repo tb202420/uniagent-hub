@@ -14,3 +14,7 @@ fastmcp==4.0.10
 cryptography==50.0.2
 # WebSocket 适配器（第 6 类，UniSpec v0.3.1；默认不加载，HUB_WS_CONFIGS 启用；惰性导入）
 websockets==15.0.1
+# 短期 JWT 令牌（v2.0 §3.6；HUB_AUTH_MODE=jwt + HUB_JWT_SECRET 启用；随 fastmcp 已装，显式锁定）
+PyJWT==2.15.1
+# Prometheus 指标（v2.0 §3.11；/metrics 端点；软依赖缺失时自动降级为 no-op）
+prometheus-client==0.26.0

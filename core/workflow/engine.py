@@ -4,7 +4,9 @@
 - 智能（Agent 一次性生成蓝图）与执行（引擎按图执行）解耦，Agent 只消耗一次调用 token
 - 每步调用仍走 gateway.call()（Guard 校验 + 审计完整，不旁路安全）
 - 条件表达式用自研安全解析器（core/workflow/expr.py），零 eval
-- 递归防护：步骤中不允许调用 run_workflow 自身
+- 递归防护：步骤中不允许调用 run_workflow 自身；DAG 最长路径深度上限 20（v2.0）
+- 并行分支（v2.0）：蓝图声明 `parallel: true` 时按拓扑层并发执行（默认串行，口径不变）
+- 事件流（v2.0 初版）：每步状态变化写入内存事件队列，供 /workflows/events 轮询（SPA 进度卡片）
 - 单步失败 → 下游标记 skipped，返回部分结果
 """
 
@@ -12,13 +14,18 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from collections import deque
 from typing import Any
 
 from core.workflow.expr import ExprError, safe_eval
 
 _REF_RE = re.compile(r"\{\{\s*([a-zA-Z_][\w.]*)\s*\}\}")
+MAX_DAG_DEPTH = 20          # v2.0：DAG 最长路径深度上限（递归防护）
+PARALLEL_MAX_WORKERS = 4    # 并行分支线程池上限（低配友好）
 
 
 class WorkflowError(ValueError):
@@ -34,6 +41,25 @@ class WorkflowEngine:
         self.step_timeout = step_timeout
         self.workflow_timeout = workflow_timeout
         self._wf_calls: list[dict] = []  # 最近执行记录（供 Web 界面可视化）
+        # v2.0 事件流：步骤状态事件（进度卡片数据源，/workflows/events 轮询）
+        self._events: deque[dict] = deque(maxlen=500)
+        self._event_seq = 0
+        self._event_lock = threading.Lock()
+
+    # ---- 事件流 ----
+
+    def _emit(self, wf: str, kind: str, **kw) -> None:
+        """wf=工作流级 trace_id；kw 可含步骤自身的 trace_id（不冲突）。"""
+        with self._event_lock:
+            self._event_seq += 1
+            self._events.append({"seq": self._event_seq, "wf": wf,
+                                 "kind": kind, "ts": round(time.time(), 3), **kw})
+
+    def events(self, since: int = 0, limit: int = 100) -> list[dict]:
+        """返回 seq > since 的事件（增量轮询）。"""
+        with self._event_lock:
+            return [dict(e) for e in self._events
+                    if e["seq"] > since][-limit:]
 
     # ---- 注册 ----
 
@@ -76,8 +102,29 @@ class WorkflowEngine:
             for dep in (s.get("depends_on") or []):
                 if dep not in idset:
                     raise WorkflowError(f"工作流 {name}: 依赖不存在的步骤 {dep}")
-        # 注册期即检测循环依赖（fail fast）
+        # 注册期即检测循环依赖（fail fast）+ DAG 深度上限（v2.0 递归防护）
         self._topo_order(bp)
+        depth = self._dag_depth(bp)
+        if depth > MAX_DAG_DEPTH:
+            raise WorkflowError(
+                f"工作流 {name}: DAG 最长路径深度 {depth} 超过上限 {MAX_DAG_DEPTH}")
+
+    @staticmethod
+    def _dag_depth(bp: dict) -> int:
+        """最长依赖路径的层数（单步为 1）。"""
+        steps = {s["id"]: s for s in bp["steps"]}
+        memo: dict[str, int] = {}
+
+        def d(sid: str, seen: frozenset = frozenset()) -> int:
+            if sid in memo:
+                return memo[sid]
+            if sid in seen:      # 循环由 _topo_order 兜底，这里防重入
+                return 0
+            deps = steps[sid].get("depends_on") or []
+            memo[sid] = 1 + max((d(x, seen | {sid}) for x in deps), default=0)
+            return memo[sid]
+
+        return max((d(s) for s in steps), default=0)
 
     # ---- 拓扑排序（Kahn）----
 
@@ -156,6 +203,10 @@ class WorkflowEngine:
         params = params or {}
         trace_id = trace_id or uuid.uuid4().hex[:8]
         wf_start = time.time()
+        self._emit(trace_id, "workflow", workflow=name, status="running")
+
+        if bp.get("parallel"):
+            return self._run_parallel(bp, name, params, trace_id, wf_start)
 
         steps = self._topo_order(bp)
         outputs: dict[str, Any] = {}
@@ -166,31 +217,32 @@ class WorkflowEngine:
         def _status(sid: str) -> str:
             return results.get(sid, {}).get("status", "pending")
 
+        def _record(r: dict) -> None:
+            results[r["id"]] = r
+            self._emit(trace_id, "step", **r)
+
         for step in steps:
             sid = step["id"]
             tool = step["tool"]
 
             if time.time() - wf_start > self.workflow_timeout:
-                status = "skipped"
                 ok_all = False
-                results[sid] = {"id": sid, "tool": tool, "status": status,
-                                "error": "工作流整体超时"}
+                _record({"id": sid, "tool": tool, "status": "skipped",
+                         "error": "工作流整体超时"})
                 continue
 
             # 失败传播：依赖步骤存在 error/skipped → 本步骤跳过
             deps = step.get("depends_on") or []
             if any(_status(d) in ("error", "skipped") for d in deps):
-                status = "skipped"
-                results[sid] = {"id": sid, "tool": tool, "status": status,
-                                "error": f"依赖步骤未成功: {[d for d in deps if _status(d) in ('error','skipped')]}"}
+                _record({"id": sid, "tool": tool, "status": "skipped",
+                         "error": f"依赖步骤未成功: {[d for d in deps if _status(d) in ('error','skipped')]}"})
                 continue
 
             # 单工具调用次数上限（防循环失控）
             if tool in tool_calls and tool_calls[tool] >= self.max_step_calls_per_tool:
-                status = "skipped"
                 ok_all = False
-                results[sid] = {"id": sid, "tool": tool, "status": status,
-                                "error": f"单工作流内 {tool} 调用超过上限 {self.max_step_calls_per_tool}"}
+                _record({"id": sid, "tool": tool, "status": "skipped",
+                         "error": f"单工作流内 {tool} 调用超过上限 {self.max_step_calls_per_tool}"})
                 continue
             tool_calls[tool] = tool_calls.get(tool, 0) + 1
 
@@ -199,13 +251,13 @@ class WorkflowEngine:
             if cond:
                 try:
                     if not self._substitute(cond, outputs, params):
-                        results[sid] = {"id": sid, "tool": tool, "status": "skipped",
-                                        "error": "条件不满足"}
+                        _record({"id": sid, "tool": tool, "status": "skipped",
+                                 "error": "条件不满足"})
                         continue
                 except WorkflowError as e:
                     ok_all = False
-                    results[sid] = {"id": sid, "tool": tool, "status": "error",
-                                    "error": f"条件解析失败: {e}"}
+                    _record({"id": sid, "tool": tool, "status": "error",
+                             "error": f"条件解析失败: {e}"})
                     continue
 
             # 参数模板：仅含 {{...}} 的字符串做替换，其余值原样传递（bool/数字/字典不误转换）
@@ -221,8 +273,8 @@ class WorkflowEngine:
                         resolved_args[k] = v
             except WorkflowError as e:
                 ok_all = False
-                results[sid] = {"id": sid, "tool": tool, "status": "error",
-                                "error": f"参数解析失败: {e}"}
+                _record({"id": sid, "tool": tool, "status": "error",
+                         "error": f"参数解析失败: {e}"})
                 continue
 
             # 执行（走 Gateway Guard + 审计；rate_scope 隔离工作流内限流桶）
@@ -238,14 +290,14 @@ class WorkflowEngine:
                 }, internal=True)
             except Exception as e:
                 ok_all = False
-                results[sid] = {"id": sid, "tool": tool, "status": "error",
-                                "error": f"执行异常: {e}"}
+                _record({"id": sid, "tool": tool, "status": "error",
+                         "error": f"执行异常: {e}"})
                 continue
 
             if resp.get("isError"):
                 ok_all = False
-                results[sid] = {"id": sid, "tool": tool, "status": "error",
-                                "error": resp["content"][0]["text"][:200]}
+                _record({"id": sid, "tool": tool, "status": "error",
+                         "error": resp["content"][0]["text"][:200]})
                 continue
 
             # 输出提取：文本 → 尝试 JSON 解析（数据管道用）
@@ -256,9 +308,9 @@ class WorkflowEngine:
                 value = text
             outputs[sid] = value
             latency = resp.get("meta", {}).get("latency_ms", 0)
-            results[sid] = {"id": sid, "tool": tool, "status": "ok",
-                            "output": value, "latency_ms": latency,
-                            "trace_id": step_trace}
+            _record({"id": sid, "tool": tool, "status": "ok",
+                     "output": value, "latency_ms": latency,
+                     "trace_id": step_trace})
 
         summary = {
             "workflow": name,
@@ -267,9 +319,125 @@ class WorkflowEngine:
             "params": params,
             "trace_id": trace_id,
         }
+        self._finish_summary(summary)
+        return summary
+
+    def _finish_summary(self, summary: dict) -> None:
         self._wf_calls.append(summary)
         if len(self._wf_calls) > 50:
             self._wf_calls.pop(0)
+        self._emit(summary["trace_id"], "workflow", workflow=summary["workflow"],
+                   status="ok" if summary["ok"] else "error")
+
+    # ---- 并行分支（v2.0）：按拓扑层并发，层内无依赖可同时执行 ----
+
+    def _topo_layers(self, bp: dict) -> list[list[dict]]:
+        steps = {s["id"]: s for s in bp["steps"]}
+        indeg = {s["id"]: len(s.get("depends_on") or []) for s in bp["steps"]}
+        ready = [i for i, d in indeg.items() if d == 0]
+        layers: list[list[dict]] = []
+        while ready:
+            layers.append([steps[i] for i in ready])
+            nxt: list[str] = []
+            for i in ready:
+                for s in bp["steps"]:
+                    if i in (s.get("depends_on") or []):
+                        indeg[s["id"]] -= 1
+                        if indeg[s["id"]] == 0:
+                            nxt.append(s["id"])
+            ready = nxt
+        if sum(len(l) for l in layers) != len(steps):
+            raise WorkflowError("工作流存在循环依赖（无法拓扑分层）")
+        return layers
+
+    def _run_parallel(self, bp: dict, name: str, params: dict,
+                      trace_id: str, wf_start: float) -> dict[str, Any]:
+        outputs: dict[str, Any] = {}
+        results: dict[str, dict[str, Any]] = {}
+        lock = threading.Lock()
+        ok_all = True
+
+        def _record(r: dict) -> None:
+            with lock:
+                results[r["id"]] = r
+            self._emit(trace_id, "step", **r)
+
+        def _status(sid: str) -> str:
+            with lock:
+                return results.get(sid, {}).get("status", "pending")
+
+        def _exec(step: dict) -> None:
+            nonlocal ok_all
+            sid, tool = step["id"], step["tool"]
+            if time.time() - wf_start > self.workflow_timeout:
+                ok_all = False
+                return _record({"id": sid, "tool": tool, "status": "skipped",
+                                "error": "工作流整体超时"})
+            deps = step.get("depends_on") or []
+            bad = [d for d in deps if _status(d) in ("error", "skipped")]
+            if bad:
+                return _record({"id": sid, "tool": tool, "status": "skipped",
+                                "error": f"依赖步骤未成功: {bad}"})
+            cond = step.get("condition")
+            if cond:
+                try:
+                    with lock:
+                        if not self._substitute(cond, outputs, params):
+                            return _record({"id": sid, "tool": tool,
+                                            "status": "skipped", "error": "条件不满足"})
+                except WorkflowError as e:
+                    ok_all = False
+                    return _record({"id": sid, "tool": tool, "status": "error",
+                                    "error": f"条件解析失败: {e}"})
+            with lock:
+                try:
+                    resolved = {k: (self._substitute(v, outputs, params)
+                                    if isinstance(v, str) and "{{" in v else v)
+                                for k, v in step.get("args", {}).items()}
+                except WorkflowError as e:
+                    ok_all = False
+                    return _record({"id": sid, "tool": tool, "status": "error",
+                                    "error": f"参数解析失败: {e}"})
+            step_trace = uuid.uuid4().hex[:8]
+            try:
+                resp = self.gateway.call({
+                    "name": tool, "arguments": resolved,
+                    "caller": "workflow", "trace_id": step_trace,
+                    "permission_level": "write",
+                    "rate_scope": f"wf:{trace_id}",
+                }, internal=True)
+            except Exception as e:  # noqa: BLE001
+                ok_all = False
+                return _record({"id": sid, "tool": tool, "status": "error",
+                                "error": f"执行异常: {e}"})
+            if resp.get("isError"):
+                ok_all = False
+                return _record({"id": sid, "tool": tool, "status": "error",
+                                "error": resp["content"][0]["text"][:200]})
+            text = resp["content"][0]["text"]
+            try:
+                value = json.loads(text)
+            except (json.JSONDecodeError, ValueError):
+                value = text
+            with lock:
+                outputs[sid] = value
+            _record({"id": sid, "tool": tool, "status": "ok", "output": value,
+                     "latency_ms": resp.get("meta", {}).get("latency_ms", 0),
+                     "trace_id": step_trace})
+
+        for layer in self._topo_layers(bp):
+            with ThreadPoolExecutor(max_workers=PARALLEL_MAX_WORKERS) as pool:
+                list(pool.map(_exec, layer))
+
+        summary = {
+            "workflow": name,
+            "ok": ok_all,
+            "steps": [results[s["id"]] for s in bp["steps"]],
+            "params": params,
+            "trace_id": trace_id,
+            "parallel": True,
+        }
+        self._finish_summary(summary)
         return summary
 
     def recent(self, limit: int = 10) -> list[dict]:

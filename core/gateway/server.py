@@ -28,6 +28,7 @@ from core.contracts import (
 )
 from core.guard.attestation import attestation_report, schema_hash
 from core.guard.audit import AuditLogger, AuditStore, default_logger
+from core.guard import metrics as obs
 from core.guard.ratelimit import RateLimiter
 from core.guard.validation import validate_args
 from core.registry.registry import ToolRegistry
@@ -54,9 +55,12 @@ class MCPGateway:
         self.meta_tools = meta_tools
         # Bearer Token 鉴权（P0-BE-2）：设置 HUB_API_TOKEN 后 /mcp 需带
         # Authorization: Bearer <token>；未设置时保持本地回路兼容模式。
+        # v2.0 §3.6：HUB_AUTH_MODE=jwt 且配置 HUB_JWT_SECRET 时同样强制鉴权。
         self.auth_enforced = (
             bool(os.environ.get("HUB_API_TOKEN"))
-            if auth_enforced is None else auth_enforced)
+            or (os.environ.get("HUB_AUTH_MODE", "static").strip().lower() == "jwt"
+                and bool(os.environ.get("HUB_JWT_SECRET")))
+        ) if auth_enforced is None else auth_enforced
 
     # ---- server/discover / tools/list ----
 
@@ -84,7 +88,8 @@ class MCPGateway:
 
     def call(self, params: dict[str, Any], *,
              authenticated: bool = False,
-             internal: bool = False) -> dict[str, Any]:
+             internal: bool = False,
+             auth_identity: dict[str, Any] | None = None) -> dict[str, Any]:
         tool_name = params.get("name", "")
         args = params.get("arguments", {}) or {}
         # trace_id：客户端可作提示，但审计主键冲突风险独立处理（P2-BE-5）
@@ -93,12 +98,21 @@ class MCPGateway:
         #   启用鉴权时，客户端上报的 permission_level / caller / rate_scope
         #   一律不作为安全依据（仅进程内工作流引擎的 internal 调用被信任）。
         client_level = params.get("permission_level", "read")
+        tool_denied = False            # JWT 模式的工具范围裁决结果
+        allowed_tools: list[str] = []
         if self.auth_enforced:
             if internal:
                 # 工作流引擎进程内调用：权限随工作流入参（受信任路径）
                 caller = params.get("caller", "workflow")
                 permission_level = params.get("permission_level", "read")
                 rate_scope = params.get("rate_scope", "external")
+            elif auth_identity is not None:
+                # JWT 模式：身份/权限/工具范围全部来自令牌 claims（v2.0 §3.6）
+                caller = auth_identity["caller"]
+                permission_level = auth_identity["perm"]
+                rate_scope = "external"
+                allowed_tools = auth_identity.get("tools") or []
+                tool_denied = bool(allowed_tools) and tool_name not in allowed_tools
             elif authenticated:
                 caller = "authenticated"
                 permission_level = "admin"
@@ -114,6 +128,12 @@ class MCPGateway:
             rate_scope = params.get("rate_scope", "external")
         ctx = CallContext(trace_id=trace_id, caller=caller,
                           permission_level=permission_level)
+
+        # JWT 工具范围（v2.0 §3.6）：令牌声明 tools 列表时，未列入的工具直接 1003
+        if tool_denied:
+            return self._finish(ctx, tool_name, args, ToolResult(
+                ok=False, error_code=E_PERMISSION_DENIED,
+                error_msg=f"令牌未授权工具 {tool_name}（允许: {allowed_tools}）"))
 
         if self.meta_tools is not None and self.meta_tools.handles(tool_name):
             return self._call_meta(ctx, tool_name, args)
@@ -202,6 +222,7 @@ class MCPGateway:
                 ok=False, error_code=E_INVALID_ARGS, error_msg=f"工作流执行失败: {e}"))
 
         latency = sum(s.get("latency_ms", 0) for s in summary["steps"])
+        obs.observe_workflow(args.get("workflow", ""), bool(summary["ok"]))
         if not summary["ok"]:
             failed = [f"{s['id']}({s['tool']}):{s.get('error','')[:60]}"
                       for s in summary["steps"] if s["status"] == "error"]
@@ -290,6 +311,9 @@ class MCPGateway:
     def _finish(self, ctx: CallContext, tool_name: str, args: dict,
                 result: ToolResult) -> dict[str, Any]:
         guard_result = "blocked" if not result.ok else "passed"
+        # v2.0 §3.11：可观测埋点（与审计同源；软依赖，未装 prometheus_client 时 no-op）
+        obs.observe_call(tool_name, result.ok, result.error_code or 0,
+                         result.latency_ms or 0)
         self.audit.record(
             trace_id=ctx.trace_id, caller=ctx.caller, tool=tool_name, args=args,
             guard_result=guard_result, block_reason=result.error_msg,
@@ -349,18 +373,38 @@ def create_app(registry: ToolRegistry, audit: AuditLogger | None = None,
     # P0-BE-2：Bearer Token 鉴权（方案 C）。设置 HUB_API_TOKEN 后，/mcp 与
     # /workflows/recent 必须携带 Authorization: Bearer <token>；
     # 未设置时保持本地回路兼容模式（配合 main.py 默认绑定 127.0.0.1）。
+    # v2.0 §3.6：HUB_AUTH_MODE=jwt + HUB_JWT_SECRET 时改为短期 JWT 校验
+    # （claims: caller/perm/tools/exp；10 分钟级时效，禁止会话认证）。
     api_token = os.environ.get("HUB_API_TOKEN", "")
+    auth_mode = os.environ.get("HUB_AUTH_MODE", "static").strip().lower()
 
     @app.middleware("http")
     async def bearer_auth(request: Request, call_next):
-        if api_token and request.url.path in ("/mcp", "/workflows/recent", "/workflows/defs"):
-            header = request.headers.get("authorization", "")
-            if not secrets.compare_digest(header, f"Bearer {api_token}"):
+        protected = request.url.path in ("/mcp", "/workflows/recent", "/workflows/defs")
+        if not protected:
+            return await call_next(request)
+        header = request.headers.get("authorization", "")
+        if auth_mode == "jwt":
+            if not api_token and not os.environ.get("HUB_JWT_SECRET"):
+                return await call_next(request)   # 未配置密钥 → 本地回路兼容
+            from core.guard.tokens import from_bearer_header, TokenError
+            try:
+                identity = from_bearer_header(header)
+            except TokenError:
+                identity = None
+            if identity is None:
                 return JSONResponse(
                     {"jsonrpc": "2.0", "id": None,
-                     "error": {"code": -32001, "message": "未授权：缺少或错误的 Bearer Token"}},
+                     "error": {"code": -32001, "message": "未授权：缺少或无效的 JWT"}},
                     status_code=401)
-            request.state.auth_identity = "authenticated"
+            request.state.auth_identity = identity
+            return await call_next(request)
+        if api_token and not secrets.compare_digest(header, f"Bearer {api_token}"):
+            return JSONResponse(
+                {"jsonrpc": "2.0", "id": None,
+                 "error": {"code": -32001, "message": "未授权：缺少或错误的 Bearer Token"}},
+                status_code=401)
+        request.state.auth_identity = "authenticated"
         return await call_next(request)
 
     @app.get("/healthz")
@@ -390,8 +434,37 @@ def create_app(registry: ToolRegistry, audit: AuditLogger | None = None,
                  "depends_on": list(s.get("depends_on") or []),
                  "condition": s.get("condition")}
                 for s in (blueprint.get("steps") or [])]
-            items.append({"name": name, "steps": steps})
+            items.append({"name": name, "steps": steps,
+                          "parallel": bool(blueprint.get("parallel"))})
         return {"items": items}
+
+    @app.get("/workflows/events")
+    def workflows_events(since: int = 0, limit: int = 100) -> dict[str, Any]:
+        """工作流执行事件流（v2.0 初版：增量轮询；SPA 进度卡片数据源）。"""
+        if gateway.workflow is None:
+            return {"items": []}
+        return {"items": gateway.workflow.events(since=since, limit=limit)}
+
+    @app.get("/scenes")
+    def scenes() -> dict[str, Any]:
+        """场景模板（v2.0 §3.1）：简易模式一键场景卡片定义。"""
+        import yaml as _yaml
+        from pathlib import Path as _Path
+        path = _Path(__file__).resolve().parents[2] / "core/workflow/scenes.yaml"
+        if not path.exists():
+            return {"items": []}
+        data = _yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return {"items": data.get("scenes", [])}
+
+    @app.get("/metrics")
+    def prometheus_metrics():
+        """Prometheus 抓取端点（v2.0 §3.11；仅本机部署语境，不鉴权）。"""
+        from fastapi.responses import Response
+        body = obs.render()
+        if body is None:
+            return Response("prometheus_client 未安装（pip install prometheus-client）",
+                            status_code=503, media_type="text/plain")
+        return Response(body, media_type="text/plain; version=0.0.4")
 
     @app.post("/mcp")
     async def mcp(request: Request) -> JSONResponse:
@@ -414,9 +487,13 @@ def create_app(registry: ToolRegistry, audit: AuditLogger | None = None,
         elif method == "tools/list":
             result = gateway.list_tools()
         elif method == "tools/call":
-            # P0-BE-1：认证身份由中间件写入 request.state，服务端据此裁决权限
-            authenticated = bool(getattr(request.state, "auth_identity", None))
-            result = gateway.call(params, authenticated=authenticated)
+            # P0-BE-1：认证身份由中间件写入 request.state，服务端据此裁决权限；
+            # JWT 模式下 auth_identity 为 claims dict（caller/perm/tools 透传裁决）
+            identity = getattr(request.state, "auth_identity", None)
+            authenticated = bool(identity)
+            result = gateway.call(
+                params, authenticated=authenticated,
+                auth_identity=identity if isinstance(identity, dict) else None)
         else:
             return JSONResponse({"jsonrpc": "2.0", "id": rpc_id,
                                  "error": {"code": -32601, "message": f"方法不存在: {method}"}},

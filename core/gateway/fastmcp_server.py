@@ -56,12 +56,52 @@ class BearerTokenMiddleware:
 
 
 def bearer_middleware() -> list[Any] | None:
-    """HUB_API_TOKEN 已设置时返回 Starlette 中间件列表，否则 None（本地回路兼容）。"""
+    """鉴权中间件列表（无凭据需求时 None，保持本地回路兼容）。
+
+    - 默认：HUB_API_TOKEN 静态 Bearer（恒时比较）
+    - v2.0 §3.6：HUB_AUTH_MODE=jwt + HUB_JWT_SECRET → 短期 JWT 校验
+      （claims: caller/perm/tools/exp，与自研网关同一语义）
+    """
     token = os.environ.get("HUB_API_TOKEN", "").strip()
+    if os.environ.get("HUB_AUTH_MODE", "static").strip().lower() == "jwt":
+        secret = os.environ.get("HUB_JWT_SECRET", "").strip()
+        if not secret:
+            return None
+        from starlette.middleware import Middleware
+        return [Middleware(JWTBearerMiddleware, secret=secret)]
     if not token:
         return None
     from starlette.middleware import Middleware
     return [Middleware(BearerTokenMiddleware, token=token)]
+
+
+class JWTBearerMiddleware:
+    """纯 ASGI JWT 鉴权（FastMCP 前端；/mcp* 受保护，其余放行）。"""
+
+    def __init__(self, app: Any, secret: str) -> None:
+        self.app = app
+        self._secret = secret
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope["type"] != "http" or not str(scope.get("path", "")).startswith("/mcp"):
+            await self.app(scope, receive, send)
+            return
+        from core.guard.tokens import from_bearer_header
+        headers = {k.decode("latin-1").lower(): v.decode("latin-1")
+                   for k, v in scope.get("headers", [])}
+        identity = from_bearer_header(headers.get("authorization", ""),
+                                      secret=self._secret)
+        if identity is not None:
+            await self.app(scope, receive, send)
+            return
+        body = json.dumps({"jsonrpc": "2.0", "id": None,
+                           "error": {"code": -32001,
+                                     "message": "未授权：缺少或无效的 JWT"}},
+                          ensure_ascii=False).encode("utf-8")
+        await send({"type": "http.response.start", "status": 401,
+                    "headers": [(b"content-type", b"application/json; charset=utf-8"),
+                                (b"content-length", str(len(body)).encode("ascii"))]})
+        await send({"type": "http.response.body", "body": body})
 
 
 def build_fastmcp_server(gateway: Any, *, caller: str | None = None,
