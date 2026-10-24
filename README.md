@@ -2,7 +2,7 @@
 
 > **AI 世界的 USB-C 接口**：无论背后是传感器、命令行工具还是云服务，插上来就能用。
 >
-> 科创比赛参赛项目 · 阶段 0-3 已完成（**216 项测试全部通过** · 工具全量 22 个（软件档 11 + 硬件档 8 + 温室模拟节点 3）/ 演示档 14 个 · 5 类适配器已实装 + WebSocket 1 类规划 · 工作流闭环）·
+> 科创比赛参赛项目 · 阶段 0-3 已完成（**216 项测试全部通过** · 工具全量 22 个（软件档 11 + 硬件档 8 + 温室模拟节点 3）/ 演示档 14 个 · **6 类适配器已实装**（第 6 类 WebSocket 2026-10-24 补全，默认档不加载） · 工作流闭环）·
 > 演示级就绪（一键启动 + 断网降级 + 3 次彩排 8/8 + 本地 LLM 接入）·
 > 改进方案第 1 批已落地（FastMCP 4 前端 / 元工具渐进发现 / 生命周期与插件 / Schema 签名与审计哈希链 / 硬件测试档）
 
@@ -64,7 +64,9 @@ python -m agent.llm_agent            # LLM 模式·云端：需 API Key（见下
 python -m agent.demo_agent           # 链路演示：工具发现 → 调用 → 注入/越权/限流拦截
 
 # 4) 审计界面（浏览器打开）
-python -m web.audit_dashboard      # http://127.0.0.1:18080
+python -m web.audit_dashboard      # http://127.0.0.1:18080（纯 HTML 审计面板）
+# 可选：React 管理控制台（工具/工作流 DAG/安全/审计四页）
+cd web/spa && npm install && npm run build && cd ../..   # 之后访问 http://127.0.0.1:18080/spa/
 ```
 
 **开启鉴权（可选，安全批次）**：设置 `HUB_API_TOKEN` 后，`/mcp` 与 `/workflows/recent`
@@ -122,7 +124,8 @@ uniagent-hub/
 │   ├── script_adapter/    #   本地脚本（路径沙箱）
 │   └── database_adapter/  #   数据库（SQLite 只读查询 + 受限写，B9）
 ├── agent/                 # Demo Agent（LLM 可插拔 + 脚本降级）
-├── web/audit_dashboard/   # 审计 Web 界面（FastAPI + 纯 HTML）
+├── web/audit_dashboard/   # 审计 Web 界面（FastAPI + 纯 HTML；JSON API 供 SPA）
+├── web/spa/               # 管理控制台（React 19 + React Flow 12；npm run build 后 /spa）
 ├── generated_cli/        # CLI 反向生成产物（8 个脚本）
 ├── scripts/              # 一键演示启动 / 预热 / 彩排评分 / Ollama 预热 / 本地 broker / Mock API
 ├── demo_fallback/        # 演示降级素材（预录视频位 + 应急预案）

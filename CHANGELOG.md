@@ -8,6 +8,15 @@
 
 ### 新增
 - 开源治理文件：LICENSE（Apache-2.0）/ CONTRIBUTING / SECURITY / 本文件
+- **第 6 类适配器 WebSocket**（UniSpec v0.3.1 `websocket_stream`）：订阅缓存读 / 写发送 /
+  断线指数退避重连；默认不加载（`HUB_WS_CONFIGS` 启用，演示档口径不变）；含真实回环集成测试
+- **React 管理控制台初版**（`web/spa`，React 19 + React Flow 12）：工具注册中心 / 工作流 DAG /
+  安全中心 / 审计日志四页；Dashboard 新增 JSON API（`/api/stats|audit|tools|workflows|workflow-defs|audit/verify`）
+- 网关新增 `GET /workflows/defs`（蓝图结构，SPA 可视化数据源；受 Bearer 保护）
+- **ESP32-S3 温室固件真机轨**：UniSpec 契约与模拟器逐字段对齐（契约回归测试 6 项），
+  DHT22 位带直驱 / BH1750 / 土壤 ADC / 继电器 / 看门狗 / 断线退避 / OTA 可选 / TLS 可选；
+  编译（RAM 15.2%/Flash 24.4%）与真机烧录启动实测通过
+- 硬件档新增 2 个灌溉策略蓝图：光照感知灌溉（白天判定）与三连干旱告警灌溉
 
 ### 修复
 - 硬件测试活文档（test_plan / test_cases）的工具数预期与现口径对齐

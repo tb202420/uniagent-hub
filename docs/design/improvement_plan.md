@@ -109,3 +109,16 @@ $env:HUB_REST_SPECS = "adapters/rest_adapter/specs/open_meteo.yaml;adapters/rest
 $env:HUB_REST_ALLOWED_PRIVATE_HOSTS = "127.0.0.1"
 $env:HUB_WORKFLOWS = "core/workflow/workflows_hardware.yaml"
 ```
+
+---
+
+## 状态快照（2026-10-24）
+
+- **批 3（React 19 SPA）**：初版已落地（web/spa：工具/工作流 DAG/安全/审计四页，
+  React Flow 12 依赖分层布局；Dashboard JSON API 数据源）。ELK 自动布局与拖拽编辑为下一步。
+- **批 4（Tauri 2）**：未启动（本机无 Rust 工具链）；按规划以 Docker Compose + 浏览器为主演示形态，
+  可选 tauri-action 在 CI 构建。
+- **批 5（适配器扩容）**：**WebSocket 适配器已实装**（UniSpec v0.3.1 第 6 类，默认不加载），
+  httpx.Client 复用已落地；Tuya 签名认证插件与 JWT 短期令牌未启动。
+- **ESP32 真机轨**：固件已实现（UniSpec 契约与模拟器逐字段对齐 + 契约回归测试 6 项），
+  编译/烧录/启动实测通过；待填 WiFi 后做端到端联调。
