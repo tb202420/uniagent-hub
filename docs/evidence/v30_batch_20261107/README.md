@@ -14,7 +14,10 @@
 | `fallback_and_reset.txt` | 真机离线 → SIL 兜底实测；reset 0.59s | 见 `docs/demo_操作手册.md` §B/§D |
 | `branch_rejected_and_modify.txt` | 拒绝 / 改成 60 秒两个分支的实测与成功判定 | 见 `docs/demo_操作手册.md` §E |
 | `secrets_check.txt` | 已跟踪密钥扫描、secrets.h 忽略状态、历史检查结论 | 推送前安全自查 |
+| `consistency_scan_20261107.txt` | 材料一致性扫描记录（禁用口径命中判定与修正清单） | `data/_scan_materials.py` |
+| `push_and_tag.txt` | v3.0 公开分支与 tag 的远程引用、公开排除边界；网络重试命令 | `git ls-remote origin` |
 | `rehearse6_results.txt` | 六分钟答辩技术排练 3/3 | 见 `docs/答辩6分钟_排练稿.md` |
+| `stress_coldhot_ports.txt` | 冷启动×3 / 热启动×3 实测（wf/dev/wait/chain，全 exit 0）；端口冲突安全结论（reset 只清自身 pids 文件内进程） | 见该文件内复跑命令 |
 | `coverage_summary.txt` | 行覆盖率总览与关键模块 | pytest-cov 生成 `coverage-v30.json` 后汇总 |
 
 ## 关键数字（本次实测）

@@ -1,0 +1,39 @@
+UniAgent Hub v3.0 推送与 Tag 记录（2026-11-07）
+
+远程仓库：https://github.com/tb202420/uniagent-hub
+推送方式：公开安全分支（远程 main 保持原样，未合并、未强推）
+
+远程引用（已推送成功，2026-11-07 早段）：
+  refs/heads/v3.0 = f33807c → 5beb33f → baa6f58（推进记录）
+  refs/tags/v3.0-three-layer-console = 06c0da7（指向 baa6f58）
+
+最新本地提交（网络故障，待重试推送）：
+  v3.0-public 分支新提交 ba9fd1b（口径一致性收口），tag 已本地重建。
+  重试命令：
+    git checkout v3.0-public
+    git push origin v3.0-public:v3.0
+    git push -f origin v3.0-three-layer-console
+    git checkout main
+  失败原因：2026-11-07 22:06 起本机连接 github.com:443 超时/重置（网络环境问题，
+  与仓库无关；api.github.com 亦时断时续）。
+
+分支内容：
+- v3.0 代码、测试、三层控制台、HITL、终端、OTel、A2A、UniSpec v0.4、pyproject；
+- 公开文档：测试报告、六分钟答辩稿、查新报告（组合创新）、附件三件套、v3.0 证据包、
+  口径映射表与收口清单；
+- 不含：docs/研究报告.md、海报方案、比赛材料总结等个人/比赛材料
+  （远程 .gitignore 保持原有公开排除规则）。
+
+历史说明：
+- 本地 main 与 origin/main 没有共同祖先（两套独立历史）；
+- 因此没有直接 push main，而是以 origin/main 为基线创建公开安全快照 v3.0；
+- 远程 main 的原有 v2.0 提交区间不受影响。
+
+验证：
+  git ls-remote origin "refs/heads/v3.0" "refs/tags/v3.0-three-layer-console"
+  → 两个引用均存在（见上）。
+
+人工后续（可选）：
+- 在 GitHub 上发起 v3.0 → main 的 Pull Request（页面提示：
+  https://github.com/tb202420/uniagent-hub/pull/new/v3.0）；
+- 若需要把研究报告等比赛材料公开，应先脱敏（姓名/学校/教师/内网信息）再单独处理。
