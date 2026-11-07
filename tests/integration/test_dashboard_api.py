@@ -88,6 +88,22 @@ def test_workflows_defs_protected_by_bearer(monkeypatch):
     assert ok.status_code == 200 and ok.json() == {"items": []}
 
 
+def test_v30_proxy_endpoints_degrade_gracefully():
+    """v3.0 代理端点：Hub 不可达时返回结构化降级结果，不抛 500。"""
+    tmp = tempfile.mkdtemp()
+    client = TestClient(create_dashboard(hub_url="http://127.0.0.1:1",
+                                         db_path=_db(tmp)))
+    cfg = client.post("/api/ws-config").json()
+    assert "error" in cfg
+    term = client.post("/api/terminal-config").json()
+    assert "error" in term
+    assert client.get("/api/traces").json() == {"items": []}
+    assert client.get("/api/hitl/pending").json() == {"items": []}
+    assert client.get("/api/events?since=0").json() == {"items": []}
+    decided = client.post("/api/hitl/decide", json={"approval_id": "x"}).json()
+    assert decided["ok"] is False
+
+
 def test_api_audit_verify_chain(tmp_path=None):
     """/api/audit/verify：哈希链完好 → ok；篡改一条 → 定位失败。"""
     import tempfile

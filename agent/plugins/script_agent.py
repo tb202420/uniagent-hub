@@ -61,14 +61,49 @@ class ScriptAgent(AgentAdapter):
                     "params": {"dir": ".", "ext": "py"}}
         return {"kind": "discover", "query": g}
 
+    def _stream_narration(self, plan: dict[str, Any], trace_id: str | None) -> None:
+        """把决策说明按小块推送到 Hub 事件流（前端 RAF 批处理消费）。
+
+        事件显式标注 source=script-agent / model=deterministic-script，
+        避免把确定性脚本输出误读为真实大模型 token。
+        """
+        import time
+        import uuid
+        from core.gateway.event_bus import default_bus
+        text = self.narrate(plan)
+        tid = trace_id or uuid.uuid4().hex[:8]
+        for i, start in enumerate(range(0, len(text), 8)):
+            default_bus.publish(
+                "agent.token", trace_id=tid, seq=i,
+                delta=text[start:start + 8],
+                source="script-agent", model="deterministic-script")
+            time.sleep(0.008)
+
     # ---- 执行 ----
+
+    @staticmethod
+    def narrate(plan: dict[str, Any]) -> str:
+        """把规则式计划转成人类可读的推理文本（流式输出内容）。
+
+        如实标注：这是确定性脚本 Agent 的决策说明，不是大模型 token。
+        """
+        if plan.get("kind") == "workflow":
+            return (f"意图识别：目标匹配到场景「{plan['workflow']}」。\n"
+                    f"风险判断：该场景包含写操作工具，需要人工审批后才能执行。\n"
+                    f"计划：读取设备状态 → 条件满足则调用 control_pump"
+                    f"（时长 {plan.get('params', {}).get('duration', 300)} 秒）。")
+        return (f"意图识别：未匹配预置场景，转为渐进式工具发现。\n"
+                f"查询：{plan.get('query', '')[:60]}")
 
     def run(self, goal: str, gateway_url: str = "http://127.0.0.1:8020",
             permission: str = "read",
-            cancel: threading.Event | None = None) -> dict[str, Any]:
+            cancel: threading.Event | None = None,
+            *, stream: bool = False, trace_id: str | None = None) -> dict[str, Any]:
         plan = self.plan_goal(goal)
         steps: list[dict[str, Any]] = []
         headers = _hub_headers()
+        if stream:
+            self._stream_narration(plan, trace_id)
         with httpx.Client(timeout=30, headers=headers) as c:
             if plan["kind"] == "workflow":
                 if cancel and cancel.is_set():
@@ -79,7 +114,7 @@ class ScriptAgent(AgentAdapter):
                     "name": "run_workflow",
                     "arguments": {"workflow": plan["workflow"],
                                   "params": plan.get("params", {})},
-                    "caller": "agent:script", "permission_level": "write"})
+                    "caller": "agent:script", "permission_level": permission})
                 ok = not r.get("isError")
                 steps.append({"step": plan["workflow"], "ok": ok,
                               "output": _text(r)[:400]})

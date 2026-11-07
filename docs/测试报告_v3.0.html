@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>UniAgent Hub v3.0 测试报告</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+         color: #1f2933; line-height: 1.65; max-width: 900px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 24px; border-bottom: 3px solid #0f3d5c; padding-bottom: 8px; }
+  h2 { font-size: 17px; color: #0f3d5c; margin-top: 28px; }
+  h3 { font-size: 15px; margin-top: 18px; }
+  .meta { color: #52606d; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 18px; font-size: 13px; }
+  th, td { border: 1px solid #cbd2d9; padding: 6px 9px; text-align: left; vertical-align: top; }
+  th { background: #eef2f6; }
+  code { background: #f3f5f7; padding: 1px 5px; border-radius: 4px; font-family: Consolas, monospace; }
+  .ok { color: #137c4f; font-weight: 700; }
+  .warn { background: #fff7e6; border-left: 4px solid #d97706; padding: 10px 14px; margin: 14px 0; }
+  .box { background: #f5f8fa; border: 1px solid #d9e2ec; border-radius: 8px; padding: 12px 16px; }
+  @media print { .no-print { display: none; } }
+</style>
+</head>
+<body>
+<h1>UniAgent Hub v3.0 测试报告</h1>
+<p class="meta">2026-11-07 实测 · Windows 11 · Python 3.14.3 · pytest 9.1.1 · pytest-cov 7.1.0<br>
+数字口径以 <code>docs/口径速查表.md</code> §6.1 / §7 为唯一裁决源。</p>
+
+<h2>1. 结论</h2>
+<table>
+<tr><th>项</th><th>结果</th></tr>
+<tr><td>自动化测试</td><td class="ok">321 项全部通过，0 失败，0 错误，0 跳过</td></tr>
+<tr><td>与 v2.0 收口基线对比</td><td>261 → 321（v3.0 批次 +60）</td></tr>
+<tr><td>测试文件</td><td>42 项（41 个 <code>test_*.py</code> + 1 个五适配器统一契约文件）</td></tr>
+<tr><td>分布</td><td>unit 268 · integration 46 · adapters 7</td></tr>
+<tr><td>行覆盖率</td><td>72.1%（3221 / 4467 statements）</td></tr>
+<tr><td>全量耗时</td><td>63–70s</td></tr>
+</table>
+
+<h2>2. 复现命令</h2>
+<div class="box">
+<pre><code>.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest -q `
+  --junitxml=data/pytest-v30.xml `
+  --cov=core --cov=adapters --cov=agent --cov=web `
+  --cov-report=term --cov-report=json:data/coverage-v30.json</code></pre>
+</div>
+<p class="meta">退出码 0 = 全绿。PATH 上的 <code>python</code> 在本机是坏 shim，使用 <code>.venv\Scripts\python.exe</code> 全路径。</p>
+
+<h2>3. v3.0 新增覆盖（+60 项）</h2>
+<table>
+<tr><th>测试文件</th><th>覆盖对象</th><th>关键断言</th></tr>
+<tr><td>test_unispec_v04.py（9）</td><td>UniSpec v0.4.0</td><td>默认版本、MHS 绑定派生、cli/code_file 控制机制、非法枚举/版本拒绝、<code>_meta.unispec</code></td></tr>
+<tr><td>test_hitl.py（9）</td><td>HITL 审批 Broker</td><td>只对 write 目标触发、只读跳过、允许/拒绝/改 60 秒、超时、幂等、审计哈希链</td></tr>
+<tr><td>test_terminal_tokens.py（5）</td><td>终端 token 安全</td><td>单次有效、用途隔离、60s TTL、子协议解析、过期清理</td></tr>
+<tr><td>test_terminal_session.py（5）</td><td>交互终端会话</td><td>管道回显往返、sudo/curl/PowerShell 下载拦截、阻塞态事件、转录</td></tr>
+<tr><td>test_tracer.py（5）</td><td>OTel GenAI SemConv</td><td>span 父子关系、start/end 事件、异常状态、<code>gen_ai.*</code> 字段、trace 淘汰</td></tr>
+<tr><td>test_a2a.py（7）</td><td>A2A 最小端点</td><td>goal/permission 校验、write 委派、read 拒绝、只读发现链、状态查询</td></tr>
+<tr><td>test_pyproject_metadata.py（4）</td><td>打包元数据</td><td>可解析、entry_points 两组、console script、版本一致</td></tr>
+<tr><td>test_v30_gateway_api.py（15）</td><td>网关 v3.0 API 端到端</td><td>WS 单次 token、轮询兜底、审批允许/拒绝/改参、只读跳过、trace、终端 WS 回显 + Guard</td></tr>
+<tr><td>test_dashboard_api.py（+1）</td><td>Dashboard v3.0 代理</td><td>Hub 不可达时结构化降级，不抛 500</td></tr>
+</table>
+
+<h2>4. 既有 261 项基线（未回归）</h2>
+<ul>
+<li>适配器 6 类与统一契约；Guard：注入 1007 / 越权 1003 / 限流 1004 / 参数 1002</li>
+<li>审计 JSONL + SQLite 双写、<code>schema_hash</code>、哈希链校验（8 项）</li>
+<li>工作流 Kahn 拓扑、零 eval 表达式、并行、三元、事件流、深度上限</li>
+<li>ESP32 温室模拟器 14 项 + 固件契约回归 6 项</li>
+<li>鉴权：静态 Bearer / 短期 JWT（9 项）；FastMCP 4 与元工具（15 项）</li>
+</ul>
+
+<h2>5. 覆盖率明细（关键模块）</h2>
+<table>
+<tr><th>模块</th><th>覆盖率</th><th>说明</th></tr>
+<tr><td>core/unispec/models.py</td><td>98%</td><td>v0.4 字段与派生规则</td></tr>
+<tr><td>core/guard/audit.py</td><td>92%</td><td>哈希链与双写</td></tr>
+<tr><td>core/guard/hitl.py</td><td>84%</td><td>审批主路径</td></tr>
+<tr><td>core/observability/tracer.py</td><td>88%</td><td>本地 span 存储 + OTel 双写</td></tr>
+<tr><td>core/terminal/tokens.py</td><td>88%</td><td>单次有效 / TTL</td></tr>
+<tr><td>core/terminal/session.py</td><td>69%</td><td>Windows 管道实测；POSIX pty 由 CI ubuntu 覆盖</td></tr>
+<tr><td>core/gateway/server.py</td><td>81%</td><td>WS / 审批 / 追踪 / A2A / Agent 端点</td></tr>
+<tr><td>web/audit_dashboard/app.py</td><td>60%</td><td>纯 HTML 页面与 Hub 在线分支</td></tr>
+<tr><td><b>TOTAL</b></td><td><b>72.1%</b></td><td>3221 / 4467 statements</td></tr>
+</table>
+
+<h2>6. 演示闭环证据（SIL）</h2>
+<table>
+<tr><th>项</th><th>数值</th><th>边界</th></tr>
+<tr><td>连续 10 次</td><td class="ok">10/10 通过</td><td>端到端 10.8–11.1s</td></tr>
+<tr><td>工作流耗时</td><td>均值 5.26s</td><td>含审批等待</td></tr>
+<tr><td>审批等待</td><td>均值 2.99s</td><td>脚本配置停留 2s + 事件/HTTP 往返，不是人工反应时间</td></tr>
+<tr><td>control_pump 写回执</td><td>100–141ms</td><td>SIL 模拟器，非真机 152ms</td></tr>
+<tr><td>设备就绪探针</td><td>1.97–2.02s</td><td>Broker + 模拟器 + Hub 冷启动，非真机上电 0.23s</td></tr>
+</table>
+
+<div class="warn">
+<b>诚实边界：</b>
+覆盖率是行覆盖率，不是分支覆盖率；Windows 交互终端是持久管道会话（不是 PTY）；
+A2A 只做任务委派 + 状态查询；OTel 不自建 Collector；真机 152ms / 5.1s 本次未重测；
+Tauri 仍只到“外壳已编译验证”。
+</div>
+
+<p class="meta">原始证据：<code>docs/evidence/v30_batch_20261107/pytest_v30.xml</code>、
+<code>demo_close_loop_events.jsonl</code>、<code>demo_close_loop_audit.jsonl</code>、
+<code>summary_10runs.txt</code>、<code>coverage_summary.txt</code>。</p>
+<p class="meta no-print">导出 PDF：浏览器打开本文件 → 打印 → 另存为 PDF（人工一步）。</p>
+</body>
+</html>

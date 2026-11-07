@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uniagent-hub"
+version = "0.4.0"
+description = "UniAgent Hub — 用 UniSpec 统一六类资源为 MCP 工具的 Agent 集成平台（v3.0 三层控制台）"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "UniAgent Hub contributors" }]
+keywords = ["mcp", "agent", "iot", "unispec", "a2a", "otel", "hitl"]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+  "fastapi==0.141.1",
+  "uvicorn==0.54.0",
+  "pydantic==2.13.5",
+  "PyYAML==6.0.3",
+  "paho-mqtt==2.1.0",
+  "httpx==0.28.1",
+  "fastmcp==4.0.10",
+  "cryptography==50.0.2",
+  "websockets==15.0.1",
+  "PyJWT==2.15.1",
+  "prometheus-client==0.26.0",
+  # v3.0 可观测（OTel GenAI SemConv；缺失时 tracer 自动降级为纯本地记录）
+  "opentelemetry-sdk==1.45.2",
+  "opentelemetry-exporter-otlp==1.45.2",
+  "opentelemetry-instrumentation-fastapi==0.66b2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.1.1",
+  "pytest-cov==7.1.0",
+  "amqtt==0.12.1",
+]
+
+[project.scripts]
+uniagent-hub = "main:main"
+
+# 第三方插件声明位（运行时由 core/adapters/plugins.py 与 agent/plugins/registry.py
+# 通过 importlib.metadata.entry_points 自动发现；内置适配器不走 entry_points，
+# 避免与 main.py 的显式加载重复注册）。
+[project.entry-points."uniagent_hub.adapters"]
+
+[project.entry-points."uniagent_hub.agent_adapters"]
+
+[tool.setuptools]
+py-modules = ["main"]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["core*", "adapters*", "agent*", "web*"]
+exclude = ["tests*", "docs*", "data*", "demo*", "tools*", "scripts*"]
+
+[tool.setuptools.package-data]
+"adapters.cli_adapter" = ["configs/*.yaml"]
+"adapters.rest_adapter" = ["specs/*.yaml"]
+"adapters.script_adapter" = ["configs/*.yaml", "scripts/*.py"]
+"adapters.database_adapter" = ["configs/*.yaml"]
+"adapters.websocket_adapter" = ["configs/*.yaml"]
+"core.workflow" = ["*.yaml"]

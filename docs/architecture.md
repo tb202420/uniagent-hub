@@ -185,3 +185,74 @@ flowchart LR
 网关默认监听 `127.0.0.1`；设置 `HUB_API_TOKEN` 后，`/mcp` 与 `/workflows/recent` 需携带
 `Authorization: Bearer <token>`（401=未授权，JSON-RPC 错误码 -32001）。鉴权开启时权限由
 服务端裁决（认证=admin、未认证=read；客户端 `permission_level` 仅作提示）。
+
+---
+
+## 9. v3.0 三层控制台架构（2026-11-07）
+
+### 9.1 分层与数据流
+
+```
+监视层 Model Output Console       控制层 Terminal Console        编排层
+┌──────────────────────────┐     ┌──────────────────────────┐   ┌──────────────┐
+│ 流式 token（RAF 批处理）  │     │ xterm.js + FitAddon      │   │ 场景卡片      │
+│ 工具四阶段状态条          │     │ HITL 审批卡片            │   │ React Flow   │
+│ span 瀑布图（默认 4 span）│     │ Agent ↔ 人工接管（Zustand）│   │ + ELK 布局   │
+└────────────┬─────────────┘     └────────────┬─────────────┘   └──────┬───────┘
+             │                               │                      │
+             └─────────────── 单条 WebSocket 事件流 ───────────────────┘
+                                   /ws/events
+                                        │
+                     ┌──────────────────┴───────────────────┐
+                     │  EventBus（seq + ring + 订阅队列）      │
+                     │  span / tool.stage / hitl / token /   │
+                     │  terminal.* / a2a.task / workflow     │
+                     └──────────────────┬───────────────────┘
+                                        │
+        ┌───────────────────────────────┼───────────────────────────────┐
+        │                               │                               │
+  Tracer（GenAI SemConv）        MCPGateway（Guard 管道）         TerminalManager
+  本地 span 树 + OTel SDK 双写    + HITL 审批闸门                 token / 输入 Guard
+```
+
+### 9.2 关键设计决策
+
+1. **事件循环不可阻塞**：`/mcp` 的 `tools/call` 必须走 `run_in_threadpool`。
+   HITL 等待是同步阻塞，放进事件循环会让 WS 与审批端点一起死锁（见试错记录一）。
+2. **审批粒度收敛**：只对 `HUB_APPROVAL_TOOLS`（默认 `control_pump`）且 write/admin
+   的调用触发；只读调用与工作流只读步骤自动放行。拒绝/超时复用 1003，不改冻结错误码。
+3. **token 不进 URL**：事件/终端 token 单次有效、60s TTL，经
+   `Sec-WebSocket-Protocol` 子协议传递；服务端 consume 后立即失效。
+4. **平台差异如实标注**：POSIX 用 stdlib `pty`；Windows 用持久 stdin/stdout 管道
+   （不是 PTY），两者共享字节流/Guard/接管语义。
+5. **OTel 双轨**：`/traces` 用本地 span 存储保证演示可查询；同一 span 双写 OTel SDK，
+   配置 `HUB_OTEL_ENDPOINT` 时才向 Collector 导出（不自建 Collector）。
+6. **A2A 克制**：只做 `POST /a2a/tasks` + `GET /a2a/tasks/{id}`，不扩展生命周期；
+   工具调用仍走 Gateway Guard。
+7. **前端性能**：token 增量进缓冲，每个 `requestAnimationFrame` flush 一次；
+   xterm 动态 `import()` 代码分割，避免首屏加载 332kB 终端库。
+
+### 9.3 审批时序（正常路径）
+
+```
+Agent/Scene → POST /mcp tools/call(run_workflow)
+  → WorkflowEngine 逐步 gateway.call(control_pump)
+    → Guard: 存在→权限→限流→参数校验
+    → ApprovalBroker.request() → 事件 hitl.request → 阻塞等待（线程池线程）
+    → 前端控制层显示审批卡片；瀑布图 guardrail.approval span = running
+    → POST /hitl/decide(approved) → Event 置位
+    → 适配器执行 → MQTT QoS1 回执 → tool.stage(result)
+    → 审批记录 + 工具审计写入哈希链
+  → run_workflow 返回 → span.end → 前端瀑布图闭合
+```
+
+### 9.4 新增模块边界
+
+| 模块 | 职责 | 明确不做 |
+|---|---|---|
+| `core/gateway/event_bus.py` | 线程安全事件分发、seq 增量、慢消费者丢弃最旧 | 不做持久化消息队列 |
+| `core/guard/hitl.py` | 审批请求/等待/决策/改参/超时/审计 | 不做跨进程审批、不做多级会签 |
+| `core/terminal/*` | token、输入 Guard、会话生命周期 | Windows 不引入 pywinpty / ConPTY |
+| `core/observability/tracer.py` | 本地 span 树、GenAI 字段、OTel 双写 | 不自建 Collector、不做采样策略 |
+| `core/a2a/service.py` | 任务委派 + 状态查询 | 不做完整 A2A 生命周期 |
+| `web/spa/src/*` | 三层视图、RAF、瀑布图、审批卡、接管 | 不重写为 TS/AntD（roadmap） |

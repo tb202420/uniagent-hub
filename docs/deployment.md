@@ -1,6 +1,6 @@
 # UniAgent Hub — 部署指南
 
-> 版本：v1.0 · 2026-09-26 · 配套：`README.md`（快速开始）· `docs/api.md`（接口）· `docs/demo_script.md`（演示）
+> 版本：v1.1（v3.0 增补） · 2026-11-07 · 配套：`README.md`（快速开始）· `docs/api.md`（接口）· `docs/demo_操作手册.md`（v3.0 一键闭环）
 > 本文覆盖：环境要求、两种启动方式（Python 直跑 / Docker Compose）、配置项、离线模式、健康检查与故障排查。
 
 ---
@@ -27,6 +27,7 @@
 | 18080 | 审计面板（Web） | 演示默认 |
 | 11434 | Ollama 本地模型 | 可选（LLM 环节） |
 | 1883 / 8899 | 本地 MQTT broker / 本地 Mock 天气 API | 仅 `-Offline` 模式 |
+| **1884 / 8021** | **v3.0 一键闭环：本地 broker / Hub** | `demo/irrigation_approval.py` 专用（避免与 8020 冲突） |
 | 8000 / 18083 | Hub（Docker 路径）/ EMQX Dashboard | Docker Compose |
 
 > 端口被占用时：Hub 用 `--port` 改，面板用 `--port` 改；8020 的由来是本机 8000 被 VirtualBox 占用（见 dev_log）。
@@ -108,6 +109,12 @@ Agent 不容器化，宿主机直跑（`py -m agent.llm_agent --url http://127.0
 | `LLM_API_KEY` | 空 | 云端 LLM（OpenAI 兼容）Key；不设则本地 Ollama 或脚本降级 |
 | `HUB_DASH_USER` / `HUB_DASH_PASS` | 空（关闭认证） | 审计面板 Basic Auth（公网暴露时务必启用） |
 | `HUB_API_TOKEN` | 空（关闭鉴权） | 设置后 `/mcp` 与 `/workflows/recent` 需 Bearer Token；鉴权开启时权限由服务端裁决（认证=admin、未认证=read） |
+| `HUB_APPROVAL_TOOLS` | `control_pump` | v3.0 HITL 审批名单（逗号/分号分隔；`*` = 全部 write/admin；空 = 关闭审批） |
+| `HUB_APPROVAL_TIMEOUT` | `90` | 审批等待秒数；超时按 1003 拒绝并写入审计 |
+| `HUB_TERMINAL_TOKEN_TTL` | `60` | 事件/终端 WS 单次 token 有效期（秒） |
+| `HUB_OTEL_ENDPOINT` | 空 | 设置后向 OTLP Collector 导出 span；不设则只写本地 `/traces` |
+| `HUB_AUDIT_CHAIN` | `0` | 设为 `1` 开启审计哈希链（审批决策必须开启才能验证） |
+| `HUB_SELF_URL` | 启动时按 `--host/--port` 生成 | Agent 插件 / A2A 回调 Hub 自身地址 |
 
 模型侧参数（演示关键，勿随意改动，依据 `docs/evidence/` 实测）：
 `num_ctx=16384`（默认 4096 会截断提示词；65536 挤爆 16GB 显存）、采样温度 `0.0`
@@ -121,6 +128,10 @@ Agent 不容器化，宿主机直跑（`py -m agent.llm_agent --url http://127.0
 | 工具注册 | `tools/list`（见 api.md） | 演示档 14 个（软件档 11 + 温室模拟 3）；全量档 22 个（14 + 硬件档 8） |
 | 断电恢复 | 重启 Hub → `tools/list` | 工具自动恢复（SQLite） |
 | 审计面板 | http://127.0.0.1:18080 | 概览/审计/工作流三页 200 |
+| v3.0 事件流 | `POST /events/token` → 带子协议连 `/ws/events` | 收到 `span.start` / `tool.stage` 事件 |
+| v3.0 追踪 | `GET /traces` | 返回最近 trace 与 span 树 |
+| v3.0 审批 | `GET /hitl/pending` | 审批期间返回 pending 请求；决策后清空 |
+| v3.0 一键闭环 | `python -m demo.irrigation_approval` | exit 0，10/10 连跑通过（约 11s/次） |
 | 全栈自检 | `py scripts/demo_warmup.py` | 5 项检查全 ✓ |
 
 ## 7. 故障排查

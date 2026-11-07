@@ -166,7 +166,9 @@ def create_dashboard(hub_url: str = "http://127.0.0.1:8000",
                               "permission_level": "write",
                               "trace_id": body.get("trace_id", "") or None}}
         try:
-            resp = httpx.post(f"{hub}/mcp", json=payload, timeout=70,
+            # HITL 审批会暂停工作流等待人工决策（默认上限 90s），
+            # 代理超时须大于审批上限，否则前端会先看到超时而错过审批结果。
+            resp = httpx.post(f"{hub}/mcp", json=payload, timeout=130,
                               headers=_hub_headers())
             return resp.json().get("result", {})
         except Exception as e:  # noqa: BLE001
@@ -183,6 +185,69 @@ def create_dashboard(hub_url: str = "http://127.0.0.1:8000",
             return resp.json()
         except Exception:
             return {"items": []}
+
+    # ---- v3.0 三层控制台支撑：事件流 / 终端 token / 审批 / 追踪 ----
+
+    def _ws_url(path: str) -> str:
+        base = hub.replace("https://", "wss://").replace("http://", "ws://")
+        return f"{base}{path}"
+
+    def _issue_ws_token(purpose: str, path: str, prefix: str) -> dict:
+        try:
+            resp = httpx.post(f"{hub}/{purpose}/token", timeout=5,
+                              headers=_hub_headers())
+            if resp.status_code != 200:
+                return {"error": f"Hub 拒绝签发 token（HTTP {resp.status_code}）"}
+            token = resp.json().get("token", "")
+            return {"url": _ws_url(path), "token": token,
+                    "protocol_prefix": prefix}
+        except Exception as e:  # noqa: BLE001
+            return {"error": f"Hub 不可达: {type(e).__name__}"}
+
+    @app.post("/api/ws-config")
+    def api_ws_config() -> dict:
+        return _issue_ws_token("events", "/ws/events", "ua.events")
+
+    @app.post("/api/terminal-config")
+    def api_terminal_config() -> dict:
+        return _issue_ws_token("terminal", "/ws/terminal", "ua.terminal")
+
+    @app.get("/api/events")
+    def api_events(since: int = 0, limit: int = 200) -> dict:
+        try:
+            resp = httpx.get(f"{hub}/events", timeout=5,
+                             params={"since": since, "limit": limit},
+                             headers=_hub_headers())
+            return resp.json()
+        except Exception:
+            return {"items": []}
+
+    @app.get("/api/traces")
+    def api_traces(limit: int = 20) -> dict:
+        try:
+            resp = httpx.get(f"{hub}/traces", timeout=5,
+                             params={"limit": limit}, headers=_hub_headers())
+            return resp.json()
+        except Exception:
+            return {"items": []}
+
+    @app.get("/api/hitl/pending")
+    def api_hitl_pending() -> dict:
+        try:
+            resp = httpx.get(f"{hub}/hitl/pending", timeout=5,
+                             headers=_hub_headers())
+            return resp.json()
+        except Exception:
+            return {"items": []}
+
+    @app.post("/api/hitl/decide")
+    def api_hitl_decide(body: dict) -> dict:
+        try:
+            resp = httpx.post(f"{hub}/hitl/decide", json=body, timeout=10,
+                              headers=_hub_headers())
+            return resp.json()
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": f"Hub 不可达: {type(e).__name__}"}
 
     @app.get("/api/audit/verify")
     def api_audit_verify() -> dict:

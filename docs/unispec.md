@@ -1,8 +1,10 @@
-# UniSpec v0.3.0 — 统一能力描述规范
+# UniSpec v0.4.0 — 统一能力描述规范
 
-> 状态：**已冻结** · 版本：v0.3.0 · 日期：2026-09-26（v0.1 冻结于 2026-09-25，v0.2 冻结于 2026-09-26）
+> 状态：**已冻结** · 版本：v0.4.0 · 日期：2026-11-07（v0.1 冻结于 2026-09-25，v0.2/v0.3.0 冻结于 2026-09-26，v0.3.1 增补于 2026-10-24）
 > 变更需走评审流程，禁止直接修改后发布。版本差异见文末「§11 变更记录」。
-> v0.3.0 评审通过依据：2026-09-26 全面复盘规划（A3 跨平台 CLI 模板 / B9 数据库适配器 / A4 设备状态 retain），经用户人工审核批准。
+> v0.4.0 为**向后兼容增量**：新增 `version` / `protocol_bindings` / `control_mechanisms` /
+> `self_description` 四个可选字段；未声明时由模型按资源类型自动派生，既有 v0.3.x 描述
+> 无需改写即可校验通过。字段语义用于 AGI 协议栈三层显式映射（MHS / MCP / A2A）。
 
 ## 1. 设计目标
 
@@ -16,15 +18,29 @@
 ```json
 {
   "id": "string, 全局唯一，形如 cli.git.status",
-  "type": "iot_device | cli_tool | rest_api | local_script | database",
+  "type": "iot_device | cli_tool | rest_api | local_script | database | websocket_stream",
   "name": "string, 展示名",
   "description": "string, 可选",
-  "protocol": "mqtt | http | subprocess | script | stdio | sqlite",
+  "protocol": "mqtt | http | subprocess | script | stdio | sqlite | websocket",
   "endpoint": { "...": "按 type 定制，见 §3" },
   "capabilities": [ "见 §4" ],
-  "constraints": { "见 §5" }
+  "constraints": { "见 §5" },
+
+  "version": "0.4.0（v0.4.0 新增，缺省 0.4.0）",
+  "protocol_bindings": {
+    "hardware_side": "MHS-compatible | none（v0.4.0；iot_device 缺省 MHS-compatible）",
+    "agent_access": ["mcp（v0.4.0；Agent 访问通道）"],
+    "inter_agent": ["a2a（可选；Agent 间协同通道，Hub 级最小端点）"]
+  },
+  "control_mechanisms": ["mcp_tool | cli | code_file（v0.4.0；可多选）"],
+  "self_description": { "...": "v0.4.0；资源自描述（厂商/型号/传输等，可选）" }
 }
 ```
+
+> v0.4.0 缺省派生规则（`core/unispec/models.py::_derive_v04_fields`）：
+> `iot_device` → `hardware_side=MHS-compatible`；`cli_tool` → `["mcp_tool","cli"]`；
+> `local_script` → `["mcp_tool","code_file"]`；其余资源 → `["mcp_tool"]`。
+> 派生的结果会写入 `tools/list` 的 `_meta.unispec`，供 Agent 自描述发现。
 
 ## 3. 各类型的 endpoint 约定
 
@@ -35,6 +51,7 @@
 | `rest_api` | `http` | `{ "base_url": "https://api.example.com", "auth": "apikey_header" }` |
 | `local_script` | `script` | `{ "path": "/opt/scripts/backup.py", "interpreter": "python3" }` |
 | `database` | `sqlite` | `{ "path": "data/uniagent_demo.db", "engine": "sqlite" }`（v0.3.0，B9） |
+| `websocket_stream` | `websocket` | `{ "url": "ws://host:8765", "topics": ["..."] }`（v0.3.1，第 6 类适配器） |
 
 ## 4. capability（能力项）
 
@@ -316,6 +333,18 @@ Hub 订阅 `{prefix}/register/+` 与 `{prefix}/devices/+/state`，收到注册�
 - 新增资源类型（如 `database`）时，先扩展 enum 并补充示例。
 
 ## 11. 变更记录
+
+### v0.4.0（2026-11-07，v3.0 AGI 协议栈对齐批次）
+
+| 处 | 变更 | 原因 |
+|---|---|---|
+| §2 | 顶层新增 `version`（缺省 `0.4.0`）、`protocol_bindings`、`control_mechanisms`、`self_description` | v3.0 协议叙事：资源需显式声明在 AGI 协议栈中的位置（硬件侧 / Agent 访问 / Agent 协同），以及可被哪些控制方式消费 |
+| §2 | `protocol_bindings.hardware_side` / `agent_access` / `inter_agent` 三键 | MHS 理念在 IoT 场景的落地；MCP 为 Agent 访问通道；A2A 为多 Agent 协同通道（Hub 级最小端点） |
+| §2 | `control_mechanisms` 三选多：`mcp_tool` / `cli` / `code_file` | CLI 适配器双模式（Agent 一次性调用 vs 人工 PTY 接管）需要显式声明 |
+| §2/§9 | 四个字段均为可选，缺省派生规则写入 §2 | 向后兼容 v0.3.x 描述；避免适配器逐份改写 YAML/JSON |
+| §4 | `tools/list` 的每个 tool 增加 `_meta.unispec`（version / resource_type / protocol_bindings / control_mechanisms） | Agent 自描述发现：调用前即可知道资源的协议位置与控制方式 |
+
+**兼容性**：全部为新增可选字段，v0.1~v0.3.1 描述无需修改即可通过校验；派生结果只会增加 `_meta`，不影响既有 `name/description/inputSchema/annotations`。
 
 ### v0.3.0（2026-09-26，全面复盘修复批次，经人工评审批准）
 

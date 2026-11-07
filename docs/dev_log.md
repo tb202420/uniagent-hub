@@ -522,3 +522,77 @@ winget 未注册 vswhere 实例的坑）→ `cargo build --release` 16.6s →
 需位于 src-tauri/ 内（frontendDist 相对路径 ../../web/spa/dist）、Windows
 资源必需 icons/icon.ico（System.Drawing 生成本项目色 64×64 图标）。
 **口径不变**：外壳编译验证 ≠ 桌面版完成；NSIS 打包与窗口运行实测仍未做（CI 路径）。
+
+---
+
+## 十七、v3.0 三层控制台批次（2026-11-07）
+
+### 17.1 目标与边界
+
+目标不是"继续加适配器"，而是把 v2.0 已具备的能力收敛成**可感知的闭环**：
+
+- 监视层：流式 token + RAF 批处理、工具四阶段、span 瀑布图；
+- 控制层：xterm 交互终端、HITL 审批、Agent ↔ 人工接管；
+- 编排层：问题陈述首页 + 场景卡 + React Flow DAG；
+- 底层：事件总线、UniSpec v0.4、A2A 最小端点、OTel GenAI SemConv、pyproject。
+
+冻结原则：不新增适配器、不扩展 A2A 语义、不引入新协议组件；A2A / Ed25519 /
+protocol_bindings 作技术储备，不进入演示主线。
+
+### 17.2 新增/修改模块
+
+| 模块 | 文件 | 说明 |
+|---|---|---|
+| 事件总线 | `core/gateway/event_bus.py` | seq + ring + 订阅队列，线程安全 |
+| HITL | `core/guard/hitl.py` | 请求/等待/决策/改参/超时/幂等；决策入审计链 |
+| 终端 | `core/terminal/{tokens,guard,session}.py` | 单次 token、输入 Guard、POSIX pty / Windows 管道 |
+| 可观测 | `core/observability/tracer.py` | 本地 span 树 + GenAI 字段 + OTel SDK 双写 |
+| A2A | `core/a2a/service.py` | 任务委派 + 状态查询，后台线程执行 |
+| 网关 | `core/gateway/server.py` | `/ws/events`、`/ws/terminal`、`/hitl/*`、`/traces`、`/agent/run`、`/a2a/*` |
+| 前端 | `web/spa/src/{pages/Console,Terminal,Scenes}.jsx` 等 | 三层视图 + RAF + 瀑布图 + 审批卡 + Zustand 接管 |
+| 打包 | `pyproject.toml` | entry_points 两组 + console script；`pip install -e .` 验证通过 |
+| 演示 | `demo/irrigation_approval.py` | 一键起 Broker/模拟器/Hub + 事件流审批人 + 分支判定 |
+
+### 17.3 踩坑与修复（按发生顺序）
+
+1. **审批等待阻塞事件循环**：`/mcp` 的 `async def` 里直接调用同步 `gateway.call()`，
+   审批 90 秒期间 WS 与 `/hitl/decide` 全部不可达。改为
+   `await run_in_threadpool(gateway.call, ...)`。见 `09015cb`。
+2. **`EventBus.since()` 关键字不匹配**：实现用 `seq`，服务端调用用
+   `since=`，HTTP 轮询直接 `TypeError`。统一参数名为 `since`。
+3. **`Span` 没有 `set_attribute`**：`with tracer.start(...) as span` 拿到的是 `Span`，
+   方法却定义在 `SpanHandle` 上，审批 span 结束时 `AttributeError`。把
+   `set_attribute` / `add_event` 补到 `Span` 数据类。
+4. **Windows 没有 stdlib pty**：`import pty` 只在 POSIX 可用；没有硬套一次性
+   subprocess，而是实现持久 stdin/stdout 管道会话，并如实标注"非 PTY"。
+5. **xterm 包体过大**：首屏 1.4MB，`xterm-*.js` 改为动态 `import()` 后独立成
+   332kB 块，首屏降到 438kB。
+6. **span.end 采集窗口少一条**：演示日志 `span.start=5 / span.end=4`，定位为
+   采集线程在最后一条结束事件到达前退出；在 `stop.set()` 前等待 0.3s。
+7. **`reset.ps1` 在 PowerShell 5.1 下中文乱码**：无 BOM UTF-8 被按 ANSI 解析，
+   `Write-Host` 行报 "string is missing the terminator"。改为 UTF-8 BOM 保存；
+   实测重置 0.59s。见 `f68cad8`。
+8. **拒绝分支退出码语义错误**：演示脚本最初用 `ok = Agent 结果`，
+   拒绝分支必然 `ok=False`，脚本返回 1，看起来像演示失败。改为按分支检查：
+   rejected 必须"工具未执行 + 审计 blocked/1003"，modify 必须"审计 duration=60"，
+   approved 必须"审计 passed"；三者任一不满足才返回 1。
+9. **pyproject 空 entry_points 表**：担心 setuptools 拒绝空表，实际
+   `pip install -e . --no-deps` 构建/安装通过；console script `uniagent-hub` 生成。
+
+### 17.4 数据与证据
+
+- 全量测试：321 项，0 失败 / 0 错误 / 0 跳过；行覆盖 72.1%；
+- 演示：连续 10 次 10/10，端到端 10.8–11.1s，工作流均值 5.26s，审批等待均值 2.99s；
+- 分支：拒绝 11.1s（exit 0，审计 blocked/1003）；改成 60 秒 10.9s（exit 0，审计 duration=60）；
+- 离线兜底：`--real --device-timeout 4` → "已切换模拟设备（SIL 兜底）"后继续完成；
+- 重置：0.59s（目标 <5s）；
+- 证据包：`docs/evidence/v30_batch_20261107/`。
+
+### 17.5 待人工
+
+- 10 次演示录屏与展板关键帧截图（真实屏幕操作）；
+- 测试报告 HTML → PDF（浏览器打印，人工一步）；
+- 研究报告 docx/pdf 重导（附录 B 已写入 md）；
+- 真机 HIL 复测（本次未重测 152ms/5.1s）；
+- Tauri NSIS 打包与窗口运行；
+- GitHub 推送与本届申报盖章。

@@ -1,8 +1,9 @@
 # UniAgent Hub — 接口契约文档
 
-> 版本：v0.5 · 日期：2026-10-04
+> 版本：v0.6 · 日期：2026-11-07
 > 本文件是阶段 0 的核心交付物：**接口冻结后，各模块按此契约并行开发，不允许随意改动**。
-> 版本差异见文末「变更记录」（§7）。
+> 版本差异见文末「变更记录」（§7）。v0.6 为 v3.0 增量：**既有 1001~1007/1999 错误码、
+> 适配器三方法、`POST /mcp` 语义全部不变**，仅新增端点。
 
 ## 1. 传输层约定
 
@@ -301,3 +302,41 @@ class BaseAdapter(Protocol):
 ### v0.1（2026-09-25，阶段 0 冻结）
 
 初次冻结：传输层、tools/list、tools/call、server/discover（契约先行）、适配器协议、错误码、审计字段。
+
+---
+
+## 8. v3.0 增量端点（2026-11-07，向后兼容）
+
+> 本节全部为**新增端点**；`/mcp` 请求/响应结构、错误码 1001~1007/1999、适配器
+> `discover()/list_tools()/call_tool(name,args,ctx)` 三方法均保持冻结。
+
+| 端点 | 方法 | 说明 | 鉴权 |
+|---|---|---|---|
+| `/events/token` | POST | 事件流单次 token（60s TTL；子协议 `ua.events.<token>`） | Bearer（配置 `HUB_API_TOKEN` 时） |
+| `/ws/events` | WebSocket | span/工具阶段/审批/终端/token 增量事件流 | 单次 token（子协议） |
+| `/events?since=` | GET | 事件流 HTTP 轮询兜底（WS 被阻断时） | 否 |
+| `/terminal/token` | POST | 终端会话单次 token（60s TTL；子协议 `ua.terminal.<token>`） | Bearer |
+| `/ws/terminal` | WebSocket | 交互终端字节流（输入帧 `{"type":"input","data":...}`） | 单次 token |
+| `/hitl/pending` | GET | 待审批请求列表 | Bearer |
+| `/hitl/decide` | POST | 审批决策（`approved` / `rejected` / `modify` + `override_args`） | Bearer |
+| `/traces` | GET | 最近 trace 列表（span 树，GenAI SemConv 字段） | Bearer |
+| `/traces/{trace_id}` | GET | 单 trace 的 span 列表 | 否 |
+| `/agent/run` | POST | 运行 Agent 插件（默认 script；工具调用仍走 Guard） | Bearer |
+| `/a2a/tasks` | POST | **A2A 最小端点**：任务委派，202 + task_id | Bearer |
+| `/a2a/tasks/{id}` | GET | **A2A 最小端点**：状态查询（submitted/working/completed/failed） | 否 |
+| `/a2a/agents` | GET | 可委派的 Agent 列表 | Bearer |
+
+HITL 语义（不新增错误码）：
+
+- 只有 `HUB_APPROVAL_TOOLS`（默认 `control_pump`）内且权限为 write/admin 的工具触发审批；
+- 只读调用继续自动放行；
+- 拒绝或超时复用 **1003**（`E_PERMISSION_DENIED`），`block_reason` 注明 `HITL 审批未通过`；
+- 每次决策（含超时）写入审计哈希链（`tool=hitl.approval`），可用 `/api/audit/verify` 校验。
+
+### v0.6（2026-11-07，v3.0 三层控制台批次）
+
+| 处 | 变更 | 原因 |
+|---|---|---|
+| §8 | 新增事件 WS / 终端 WS / HITL / 追踪 / Agent 运行 / A2A 最小端点 | v3.0 监视-控制-编排三层控制台的数据与控制通道 |
+| §8 | 终端 token 单次有效、60s TTL、经 `Sec-WebSocket-Protocol` 传递 | PTY 引入后的会话劫持防护（不在 URL 暴露凭据） |
+| §8 | 审批拒绝/超时复用 1003 | 保持错误码表冻结，不引入新错误码 |

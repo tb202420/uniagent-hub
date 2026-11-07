@@ -96,6 +96,20 @@ UNISPEC = {
     "type": "iot_device",
     "name": "温室灌溉节点（模拟）",
     "protocol": "mqtt",
+    # v0.4.0 协议绑定（v3.0）：硬件侧 MHS 理念 + Agent 经 MCP 访问
+    "version": "0.4.0",
+    "protocol_bindings": {
+        "hardware_side": "MHS-compatible",
+        "agent_access": ["mcp"],
+        "inter_agent": [],
+    },
+    "control_mechanisms": ["mcp_tool"],
+    "self_description": {
+        "class": "greenhouse-irrigation-node",
+        "mcu": "ESP32-S3",
+        "transport": "mqtt",
+        "mode": "simulator",   # 如实标注：模拟节点，非真机
+    },
     "endpoint": {
         "broker": "MQTT_BROKER",
         "topic": STATE_TOPIC,

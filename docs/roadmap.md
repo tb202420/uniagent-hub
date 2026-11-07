@@ -1,6 +1,6 @@
 # UniAgent Hub — 研发路线图与任务看板
 
-> 版本：v0.3 · 更新：2026-10-04 · 状态：阶段 0-3 已完成 + 改进方案第 1 批与安全批次已落地；阶段 4 主体交付（演示 / 文档 / 研究报告 / 答辩 PPT，2026-10-04 口径核定版），Docker Compose 实测与材料提交为赛前收尾
+> 版本：v0.4 · 更新：2026-11-07 · 状态：阶段 0-4 + v2.0 + v3.0 三层控制台已完成；测试 321 项全绿，演示闭环 10/10；剩余为材料提交与真机长稳（人工/后续）
 
 ## 0. 总原则
 
@@ -118,7 +118,7 @@
 | 4.6 | 研究报告 / 查新报告撰写 | ✅ 研究报告已定稿（2026-10-05，216 项测试口径，6 图 17 表）；查新报告 ⬜ |
 | 4.7 | 答辩 PPT 与讲稿（USB-C 比喻 + 4 大创新点） | ✅ 已成稿（2026-10-04 口径核定版） |
 | 4.8 | Docker Compose 比赛环境实测（本机 Docker 引擎曾 500，需人工修复后验证） | ⬜ |
-| 4.9 | 12/1 前提交材料（文件夹命名"所在地市+姓名+UniAgent Hub"、附件≤6MB、查重<5%） | ⬜ |
+| 4.9 | 12/1 前提交材料（文件夹命名"渭南市+姓名+UniAgent Hub"、附件≤6MB、查重<5%） | ⬜ |
 
 **验收**：演示连续 3 次无失败；评委听懂"AI 世界的 USB-C"。
 
@@ -175,3 +175,36 @@ WorkflowEngine → CLI 反向生成 + 可观测性 + 演示界面
 | 安全 | 注入/越权/超时/限流 | 全部拦截并记录 |
 | 性能 | 单工具延迟 | < 500ms |
 | 演示 | 5 分钟脚本 | 连续 3 次无失败 |
+
+## 5. v3.0 收口看板（2026-11-07）
+
+### 5.1 已完成
+
+| 任务 | 状态 | 证据 |
+|---|---|---|
+| 事件总线 + `/ws/events`（三视图共享） | ✅ | `core/gateway/event_bus.py`、`test_v30_gateway_api.py` |
+| HITL 审批闸门 + 审计哈希链 | ✅ | `core/guard/hitl.py`、`test_hitl.py` |
+| 交互终端 + 单次 token + 输入 Guard | ✅ | `core/terminal/`、`test_terminal_session.py` |
+| OTel GenAI SemConv + `/traces` | ✅ | `core/observability/tracer.py`、`test_tracer.py` |
+| A2A 最小端点 | ✅ | `core/a2a/service.py`、`test_a2a.py` |
+| UniSpec v0.4 协议绑定 | ✅ | `core/unispec/models.py`、`test_unispec_v04.py` |
+| 前端三层控制台 | ✅ | `web/spa/src/{pages/Console,Terminal,Scenes}.jsx` |
+| pyproject 打包 | ✅ | `pyproject.toml`、`test_pyproject_metadata.py` |
+| 一键闭环 + 拒绝/改参/离线兜底 + reset | ✅ | `demo/irrigation_approval.py`、`docs/evidence/v30_batch_20261107/` |
+
+### 5.2 验收数字
+
+- 测试 321 项（0 失败 / 0 跳过）；测试文件 42 项；行覆盖约 72%（未覆盖：Windows 非 PTY、界面样式）。
+- 演示闭环 10/10，端到端 10.8–11.1s；拒绝 11.1s、改 60 秒 10.9s（均 exit 0）。
+- CI 3 个 workflow：`ci.yml`（测试 + SPA 构建 + pip-audit）、`codeql.yml`、`desktop-build.yml`。
+
+### 5.3 未完成（明确边界）
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| A2A 完整生命周期 | ❌ 不做 | 仅任务委派 + 状态查询；跨 Agent 审批传播列入未来工作 |
+| Windows ConPTY | ❌ 不做 | 当前为持久管道会话；引入 pywinpty 需评估 |
+| Tauri NSIS 打包 / 窗口运行 | ⚠️ 未做 | 外壳已编译验证 |
+| 真机 72h 长稳 | ⚠️ 未做 | 单轮真机 E2E 已完成（152ms / 5.1s） |
+| 对话式 NL 引导 / PostgreSQL / Redis / Locust | ❌ 不做 | 列入 roadmap，不写成成果 |
+| 10 次演示录屏 / 展板截图 / PDF 导出 | ⚠️ 人工 | 需真实屏幕操作与浏览器打印 |
