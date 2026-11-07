@@ -5,6 +5,9 @@
 ![Python](https://img.shields.io/badge/python-3.12%20%7C%203.14-blue)
 ![Tests](https://img.shields.io/badge/tests-321%20passed-brightgreen)
 
+> **参赛版本**：v3.0 三层控制台 —— GitHub branch [`v3.0`](https://github.com/tb202420/uniagent-hub/tree/v3.0) ·
+> tag [`v3.0-three-layer-console`](https://github.com/tb202420/uniagent-hub/releases/tag/v3.0-three-layer-console)
+
 > **AI 世界的 USB-C 接口**：无论背后是传感器、命令行工具还是云服务，插上来就能用。
 >
 > 科创比赛参赛项目 · 阶段 0-3 + v3.0 三层控制台已完成（**321 项测试全部通过**

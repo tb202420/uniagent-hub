@@ -557,7 +557,8 @@ protocol_bindings 作技术储备，不进入演示主线。
 
 1. **审批等待阻塞事件循环**：`/mcp` 的 `async def` 里直接调用同步 `gateway.call()`，
    审批 90 秒期间 WS 与 `/hitl/decide` 全部不可达。改为
-   `await run_in_threadpool(gateway.call, ...)`。见 `09015cb`。
+   `await run_in_threadpool(gateway.call, ...)`。见分支 `v3.0` 提交历史（tag
+   `v3.0-three-layer-console`）。
 2. **`EventBus.since()` 关键字不匹配**：实现用 `seq`，服务端调用用
    `since=`，HTTP 轮询直接 `TypeError`。统一参数名为 `since`。
 3. **`Span` 没有 `set_attribute`**：`with tracer.start(...) as span` 拿到的是 `Span`，
@@ -571,7 +572,7 @@ protocol_bindings 作技术储备，不进入演示主线。
    采集线程在最后一条结束事件到达前退出；在 `stop.set()` 前等待 0.3s。
 7. **`reset.ps1` 在 PowerShell 5.1 下中文乱码**：无 BOM UTF-8 被按 ANSI 解析，
    `Write-Host` 行报 "string is missing the terminator"。改为 UTF-8 BOM 保存；
-   实测重置 0.59s。见 `f68cad8`。
+   实测重置 0.59s。见分支 `v3.0` 提交历史（`demo/reset.ps1`）。
 8. **拒绝分支退出码语义错误**：演示脚本最初用 `ok = Agent 结果`，
    拒绝分支必然 `ok=False`，脚本返回 1，看起来像演示失败。改为按分支检查：
    rejected 必须"工具未执行 + 审计 blocked/1003"，modify 必须"审计 duration=60"，
@@ -595,4 +596,4 @@ protocol_bindings 作技术储备，不进入演示主线。
 - 研究报告 docx/pdf 重导（附录 B 已写入 md）；
 - 真机 HIL 复测（本次未重测 152ms/5.1s）；
 - Tauri NSIS 打包与窗口运行；
-- GitHub 推送与本届申报盖章。
+- GitHub 已推送（branch `v3.0` + tag `v3.0-three-layer-console`，公开安全快照）；本届申报盖章（人工）。
