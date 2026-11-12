@@ -16,6 +16,7 @@
     .venv\\Scripts\\python.exe -m demo.irrigation_approval
     ... --decision reject        # 演示拒绝分支
     ... --decision modify        # 演示"改成 60 秒"
+    ... --agent ollama           # 用本地 Ollama 模型做决策（需 OLLAMA_BASE 可达）
     ... --manual                 # 不自动审批，留给人点
     ... --real --device-timeout 8
 """
@@ -173,6 +174,27 @@ def run(args: argparse.Namespace) -> int:
 
     base = f"http://127.0.0.1:{HUB_PORT}"
     env = _env()
+
+    # ---- Ollama Agent 预检（--agent ollama）----
+    ollama_base = ""
+    if args.agent == "ollama":
+        ollama_base = os.environ.get("OLLAMA_BASE", "http://localhost:11434").rstrip("/")
+        try:
+            tags = httpx.get(f"{ollama_base}/api/tags", timeout=3)
+            if tags.status_code != 200:
+                print(f"[demo] Ollama 不可达（HTTP {tags.status_code}）：{ollama_base}")
+                print("[demo] 请先启动 ollama serve（如端口被系统排除，改用 "
+                      "OLLAMA_HOST=127.0.0.1:11500 并设置 OLLAMA_BASE）")
+                return 1
+        except Exception as e:  # noqa: BLE001
+            print(f"[demo] Ollama 不可达（{type(e).__name__}）：{ollama_base}")
+            print("[demo] 请先启动 ollama serve（如端口被系统排除，改用 "
+                  "OLLAMA_HOST=127.0.0.1:11500 并设置 OLLAMA_BASE）")
+            return 1
+        model = os.environ.get("OLLAMA_MODEL", "gemma4local:latest")
+        print(f"[demo] Agent 模式：本地 Ollama（{model} @ {ollama_base}）")
+    else:
+        print("[demo] Agent 模式：确定性 script（非大模型）")
     procs: list[subprocess.Popen] = []
     events: list[dict] = []
     device_mode = "SIL（模拟器）"
@@ -248,7 +270,7 @@ def run(args: argparse.Namespace) -> int:
         goal = args.goal
         t1 = time.time()
         resp = httpx.post(f"{base}/agent/run", json={
-            "agent": "script", "goal": goal, "permission": "write",
+            "agent": args.agent, "goal": goal, "permission": "write",
             "trace_id": trace_id}, timeout=130)
         out = resp.json()
         if resp.status_code != 200:
@@ -340,6 +362,10 @@ def run(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="智能灌溉 + HITL 审批闭环演示")
     parser.add_argument("--goal", default="土壤干了，帮我浇水 300 秒")
+    parser.add_argument("--agent", choices=("script", "ollama"),
+                        default="script",
+                        help="决策来源：script=确定性脚本；ollama=本地大模型"
+                             "（读 OLLAMA_BASE/OLLAMA_MODEL 环境变量）")
     parser.add_argument("--decision", choices=("approved", "rejected", "modify"),
                         default="approved")
     parser.add_argument("--approval-delay", type=float, default=2.0,

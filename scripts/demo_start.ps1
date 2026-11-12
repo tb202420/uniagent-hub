@@ -42,6 +42,7 @@ param(
     [switch]$Offline,
     [switch]$Ollama,
     [string]$OllamaModel = "gemma4local:latest",
+    [int]$OllamaPort = 11434,
     [int]$OllamaNumCtx = 16384,
     [switch]$LogToFile,
     [switch]$NoDashboard,
@@ -255,6 +256,14 @@ $warmupCode = $LASTEXITCODE
 $ollamaCode = 0
 if ($Ollama) {
     Write-Host ("[7/{0}] 本地 LLM 预热（Ollama）" -f $totalSteps) -ForegroundColor White
+    # 端口与地址统一从这里下发：llm_agent 原生通道读 LLM_BASE_URL，
+    # 插件/预热脚本读 OLLAMA_BASE。
+    # 注意：Windows 可能把 11434 划进排除端口范围（Hyper-V/WinNAT），
+    # 此时需用 OLLAMA_HOST=127.0.0.1:11500 启动 ollama serve，
+    # 并给本脚本加 -OllamaPort 11500。
+    $ollamaBase = "http://127.0.0.1:$OllamaPort"
+    $env:OLLAMA_BASE = $ollamaBase
+    $env:LLM_BASE_URL = $ollamaBase
     # keep_alive=-1 供后续从本 shell 启动的进程继承；真正的常驻由预热请求内的
     # keep_alive 参数保证（Ollama 服务已在运行时，环境变量不影响它）
     $env:OLLAMA_KEEP_ALIVE = "-1"
@@ -263,11 +272,15 @@ if ($Ollama) {
         "--num-ctx", "$OllamaNumCtx")
     $ollamaCode = $LASTEXITCODE
     if ($ollamaCode -ne 0) {
-        Add-ExternalStatus -Name "ollama_llm" -Port "11434" -Status "未就绪(降级)"
+        Add-ExternalStatus -Name "ollama_llm" -Port "$OllamaPort" -Status "未就绪(降级)"
         Write-Host "  [警告] 本地 LLM 未就绪 —— 演示时 LLM 环节将自动降级为脚本模式（不失演示）" -ForegroundColor Yellow
+        Write-Host "  [提示] 若 11434 被系统排除范围占用，请：" -ForegroundColor DarkYellow
+        Write-Host "         1) OLLAMA_HOST=127.0.0.1:11500 启动 ollama serve" -ForegroundColor DarkYellow
+        Write-Host "         2) 本脚本加 -OllamaPort 11500" -ForegroundColor DarkYellow
+        Write-Host "         排查命令：netsh int ipv4 show excludedportrange protocol=tcp" -ForegroundColor DarkYellow
     }
     else {
-        Add-ExternalStatus -Name "ollama_llm" -Port "11434" -Status "已预热"
+        Add-ExternalStatus -Name "ollama_llm" -Port "$OllamaPort" -Status "已预热"
     }
     Write-Host "  [提醒] 请确认 Ollama 桌面版已关闭自动更新（设置 → 自动更新），" -ForegroundColor DarkYellow
     Write-Host "         否则演示时可能后台下载更新包导致服务重启、模型被卸载。" -ForegroundColor DarkYellow

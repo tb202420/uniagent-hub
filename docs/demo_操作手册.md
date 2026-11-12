@@ -44,6 +44,29 @@
 - 超时后自动启动模拟器，打印 **「已切换模拟设备（SIL 兜底）」**，演示继续；
 - 日志中的 `device_mode` 会写成 `SIL（真机离线兜底）`，不会冒充 HIL。
 
+## B2. 本地 Ollama Agent（大模型自主决策 · 视频主演示）
+
+```powershell
+# 0) 启动模型服务（默认 11434；本机被系统排除范围占用时改用 11500）
+$env:OLLAMA_HOST = '127.0.0.1:11500'
+& 'C:\Users\admin\AppData\Local\Programs\Ollama\ollama.exe' serve   # 另开后台
+
+# 1) 项目访问地址 + 预热（冷加载约 90s，必须提前做）
+$env:OLLAMA_BASE = 'http://127.0.0.1:11500'
+.\.venv\Scripts\python.exe -m scripts.ollama_warmup --model gemma4local:latest --num-ctx 16384
+
+# 2) 演示：允许 / 拒绝 / 改 60 秒 / 真机优先
+.\.venv\Scripts\python.exe -m demo.irrigation_approval --agent ollama
+.\.venv\Scripts\python.exe -m demo.irrigation_approval --agent ollama --decision rejected
+.\.venv\Scripts\python.exe -m demo.irrigation_approval --agent ollama --decision modify
+.\.venv\Scripts\python.exe -m demo.irrigation_approval --agent ollama --real --device-timeout 8
+```
+
+- 模型只做决策（调用哪个工具、什么参数），`control_pump` 仍需**人工审批**；
+- 模型未就绪/退化时改回默认 `--agent script`（三级降级，演示不失真）;
+- 实测数据（2026-11-12）见 `docs/demo_video_guide.md` 附一与 `docs/口径映射表.md` §2b；
+  模型决策耗时与 script 口径（10.8–11.1s）不同，**不要混说**。
+
 ## C. 手动演示（评委自己点审批）
 
 ```powershell
@@ -101,6 +124,8 @@ powershell -ExecutionPolicy Bypass -File demo\rehearse_6min.ps1
 | 现象 | 处理 |
 |---|---|
 | 端口 1884/8021 被占 | `demo\reset.ps1` 后用 `Get-NetTCPConnection -LocalPort 1884,8021` 查残留进程 |
+| `ollama serve` 起不来（11434 绑定失败） | 系统排除端口范围占用：`netsh int ipv4 show excludedportrange protocol=tcp` 确认；改用 `OLLAMA_HOST=127.0.0.1:11500` 重启 serve，`OLLAMA_BASE` 同步 |
+| `--agent ollama` 报"Ollama 不可达" | 未起服务或 OLLAMA_BASE 端口不对；启动 serve 后重试（预热后再跑演示） |
 | `python` 命令无输出/静默失败 | PATH 上是坏 shim，改用 `.venv\Scripts\python.exe` 全路径 |
 | 审批卡片不出现 | 确认 Hub 版本为 v3.0（`/healthz` 正常）、浏览器已连 `/ws/events` |
 | 终端不可输入 | 控制层默认"Agent 控制"，点右上「接管终端」 |

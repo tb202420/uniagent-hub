@@ -19,6 +19,7 @@
 | `rehearse6_results.txt` | 六分钟答辩技术排练 3/3 | 见 `docs/答辩6分钟_排练稿.md` |
 | `stress_coldhot_ports.txt` | 冷启动×3 / 热启动×3 实测（wf/dev/wait/chain，全 exit 0）；端口冲突安全结论（reset 只清自身 pids 文件内进程） | 见该文件内复跑命令 |
 | `clean_room_repro_20261107.txt` | **干净环境从零复现**（GitHub 实拉 v3.0 + 新 venv + pip + pytest 321/0/0/0 exit 0 + 三分支审计语义） | 见该文件 §2 命令表 |
+| `ollama_agent_video_20261112.txt` | 本地 Ollama Agent 视频演示实测（端口排除→11500、预热、四分支全过、回归 321） | `docs/demo_video_guide.md` 附一 |
 | `coverage_summary.txt` | 行覆盖率总览与关键模块 | pytest-cov 生成 `coverage-v30.json` 后汇总 |
 
 ## 关键数字（本次实测）

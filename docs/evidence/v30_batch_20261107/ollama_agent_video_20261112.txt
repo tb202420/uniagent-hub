@@ -1,0 +1,59 @@
+# 本地 Ollama Agent 视频演示实测（2026-11-12 · v3.0 三层控制台）
+
+> 背景：视频规划升级——主演示决策来源从确定性 script Agent 改为**本地 Ollama 模型**
+> （`gemma4local:latest`，Gemma-4-26B-A4B IQ3_XXS），并准备真机/模拟器双方案。
+> 本文件记录改动后的全链路实测；数字口径见 `docs/口径映射表.md` §2b。
+
+## 1. 环境与改动
+
+- Ollama 0.30.10；模型 gemma4local:latest（11GB）；num_ctx=16384（与 Agent 一致）
+- **端口问题**：11434 落入 Windows 排除端口范围 11346–11445（Hyper-V/WinNAT），
+  `ollama serve` 绑定失败（WSAEACCES）→ 改用 `OLLAMA_HOST=127.0.0.1:11500`，
+  项目侧经 `OLLAMA_BASE` 环境变量指向 11500。
+- 代码改动（本批）：
+  1. `agent/llm_agent.py`：Ollama 预设地址支持 `OLLAMA_BASE`/`LLM_BASE_URL`；
+  2. `agent/plugins/ollama_agent.py`：显式 num_ctx（默认 16384，对齐实测值）、
+     keep_alive 透传；工具步骤失败（如审批拒绝 blocked/1003）时整体返回 ok=False，
+     供演示分支判定复用；
+  3. `demo/irrigation_approval.py`：新增 `--agent {script,ollama}`（默认 script），
+     ollama 模式启动前预检服务可达性；
+  4. `scripts/demo_start.ps1`：新增 `-OllamaPort`，统一下发 OLLAMA_BASE/LLM_BASE_URL，
+     失败时输出排除端口排查提示。
+
+## 2. 预热实测
+
+```
+[ollama] 服务就绪：http://127.0.0.1:11500（version 0.30.10）
+[ollama] 模型已安装：gemma4local:latest（共 2 个）
+[ollama] 预热完成：90.5s（num_ctx=16384，keep_alive=-1）
+[ollama] 已常驻：ctx=16384  显存占用 11.05 GB
+```
+
+## 3. 四个演示分支（均 exit 0、branch_ok=True、审计链 ok）
+
+| # | 分支 | 命令 | 实测 |
+|---|---|---|---|
+| 1 | 允许 | `--agent ollama` | 端到端 12.659s（发现 2.023s / 审批等待 3.101s）；审计 `passed/300`；模型总结：「已为您开启灌溉水泵，持续时间为 300 秒。当前土壤含水量为 24.2%。」 |
+| 2 | 改 60 秒 | `--agent ollama --decision modify` | 15.041s（审批等待 2.972s）；审计 **`duration=60`**；模型总结如实报「执行时长为 60 秒」及土壤 24.4%、光照 11650.7 lux |
+| 3 | 拒绝 | `--agent ollama --decision rejected` | 12.107s（审批等待 3.024s）；审计 **`blocked/1003`**、工具未执行；模型总结：「灌溉操作由于审批未通过（HITL 审批被拒绝）而未能执行。」 |
+| 4 | 真机离线兜底 | `--agent ollama --real --device-timeout 4` | 10.326s（含 4s 等待）；打印「真机未上线 → 已切换模拟设备（SIL 兜底）」；`device_mode=SIL（真机离线兜底）` |
+
+- 事件流：`data/demo_runs/irrigation_approval_20261112_232756/232825/232853/232918.jsonl`
+  （demo.summary 逐条，含 approval/decision/control_pump_audit/audit_chain_ok）。
+- 结论：模型按目标自行调用 `control_pump(duration=300)`（temperature=0 下参数照抄目标），
+  审批闸门对 LLM 与脚本一视同仁；三分支审计语义与 script 口径完全一致。
+
+## 4. 回归
+
+- script 默认分支复跑：exit 0，工作流 5.107s（原口径不变；10 连跑 10.8–11.1s 仍有效）
+- 全量测试 `pytest -q`：321 项全过 exit 0（本批代码改动无回归）
+- SPA 控制台 `http://127.0.0.1:18080/spa/`：HTTP 200，「UniAgent Hub · 管理控制台」
+
+## 5. 结论与口径
+
+- 视频主演示可全程使用本地 Ollama（断网可跑、无云端依赖）；
+  模型仅做决策，`control_pump` 必经 HITL 审批 —— "安全不依赖 LLM 可靠性"直接入镜。
+- 口径纪律：Ollama Agent 单次实测区间 **10.3–15.0s**（2026-11-12，SIL），
+  与 script 10 连跑 10.8–11.1s 是**两个不同定义**，材料中禁止混用（见口径映射表 §2b）。
+- 待人工：方案 A 真机实测（ESP32-S3 上电 + `--real` 等待真机注册，
+  回执以 2026-10-24 证据 152ms 为既有口径，现场复测以现场为准）。

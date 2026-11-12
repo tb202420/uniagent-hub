@@ -48,8 +48,13 @@ DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 DEFAULT_MODEL = "deepseek-chat"
 
 # 本地 Ollama 预设（--ollama 一键切换，无需配 Key）
-OLLAMA_NATIVE_BASE = "http://localhost:11434"
-OLLAMA_MODEL = "gemma4local:latest"
+# 端口可被系统占用：Windows 有时把 11434 划进排除端口范围（netsh int ipv4 show
+# excludedportrange），此时用 OLLAMA_HOST=<ip>:<port> 重启 ollama serve，
+# 并把 OLLAMA_BASE 指向同一地址。
+OLLAMA_NATIVE_BASE = (
+    os.environ.get("OLLAMA_BASE") or os.environ.get("LLM_BASE_URL")
+    or "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4local:latest")
 
 # 本地模型的上下文窗口。**这是本地部署最关键的一项**：Ollama 默认只加载
 # 4096 上下文（实测 /api/ps 中 context_length=4096，而模型原生支持 262144），
