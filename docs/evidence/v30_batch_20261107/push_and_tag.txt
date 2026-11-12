@@ -3,11 +3,11 @@ UniAgent Hub v3.0 推送与 Tag 记录（2026-11-07）
 远程仓库：https://github.com/tb202420/uniagent-hub
 推送方式：公开安全分支（远程 main 保持原样，未合并、未强推）
 
-远程引用（最终状态，2026-11-07 晚段重试成功）：
-  refs/heads/v3.0 = f33807c → 5beb33f → baa6f58 → 07e8a27（本次会话收口批次一并推送）
-  refs/tags/v3.0-three-layer-console = 07e8a27（强制更新，与分支头部一致）
-  已用 `git ls-remote origin` 复核：两者均指向 07e8a274320ff1a87b39a169f8b5b1e9cb9cdfb8。
+远程引用（随批次推进；最新见文末）：
+  refs/heads/v3.0 = f33807c → 5beb33f → baa6f58 → 07e8a27 → a93da63（Ollama 视频批次已推）
+  refs/tags/v3.0-three-layer-console 与分支头部同步强制更新（同上推进）
   07e8a27 内容 = ba9fd1b（口径一致性收口）+ 冷热/端口实测证据、口径映射表与收口清单最终补录。
+  a93da63 内容 = 本地 Ollama 视频演示双方案与实测证据。
 
 早段网络故障说明（已恢复）：
   2026-11-07 22:06 起本机连接 github.com:443 超时/重置（网络环境问题，与仓库无关），
@@ -16,6 +16,10 @@ UniAgent Hub v3.0 推送与 Tag 记录（2026-11-07）
     git push origin v3.0-public:v3.0
     git push -f origin v3.0-three-layer-console
     git checkout main
+
+2026-11-12 晚段再次网络中断（待重试）：
+  本地 v3.0-public = ca3ccbe（研究报告修正的收口清单同步），tag 已本地前移至 ca3ccbe；
+  远程仍为 a93da63。网络恢复后执行上文同一组重试命令即可，无其他改动。
 
 分支内容：
 - v3.0 代码、测试、三层控制台、HITL、终端、OTel、A2A、UniSpec v0.4、pyproject；
