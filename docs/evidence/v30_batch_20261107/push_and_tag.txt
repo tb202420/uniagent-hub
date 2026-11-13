@@ -21,6 +21,11 @@ UniAgent Hub v3.0 推送与 Tag 记录（2026-11-07）
   本地 v3.0-public = ca3ccbe（研究报告修正的收口清单同步），tag 已本地前移至 ca3ccbe；
   远程仍为 a93da63。网络恢复后执行上文同一组重试命令即可，无其他改动。
 
+2026-11-13 网络恢复，已推送成功：
+  refs/heads/v3.0 = e3bd315；refs/tags/v3.0-three-layer-console = e3bd315
+  内容包含：研究报告修正记录、表 15 布局修复说明、查新报告填报版指针。
+  GitHub API 复核：分支 v3.0 与 tag 均存在（a93da63 阶段核验，之后推进到 e3bd315）。
+
 分支内容：
 - v3.0 代码、测试、三层控制台、HITL、终端、OTel、A2A、UniSpec v0.4、pyproject；
 - 公开文档：测试报告、六分钟答辩稿、查新报告（组合创新）、附件三件套、v3.0 证据包、
