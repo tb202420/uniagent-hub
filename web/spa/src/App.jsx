@@ -1,20 +1,28 @@
-import React, { useEffect, useState } from 'react'
-import { getJSON } from './api.js'
-import ToolsPage from './pages/Tools.jsx'
+import React, { useState } from 'react'
+import ConsolePage from './pages/Console.jsx'
+import TerminalPage from './pages/Terminal.jsx'
+import ScenesPage from './pages/Scenes.jsx'
 import WorkflowPage from './pages/Workflow.jsx'
+import ToolsPage from './pages/Tools.jsx'
 import SecurityPage from './pages/Security.jsx'
 import AuditPage from './pages/Audit.jsx'
-import ScenesPage from './pages/Scenes.jsx'
 import RecentRuns from './pages/RecentRuns.jsx'
 
+const LAYERS = [
+  { key: 'monitor', label: '① 监视层' },
+  { key: 'control', label: '② 控制层' },
+  { key: 'orchestrate', label: '③ 编排层' },
+]
+
 const EXPERT_TABS = [
+  ...LAYERS,
+  { key: 'workflow', label: 'DAG 工作流' },
   { key: 'tools', label: '工具注册中心' },
-  { key: 'workflow', label: '工作流编排' },
   { key: 'security', label: '安全中心' },
   { key: 'audit', label: '审计日志' },
 ]
 const SIMPLE_TABS = [
-  { key: 'scenes', label: '一键场景' },
+  ...LAYERS,
   { key: 'recent', label: '最近执行' },
   { key: 'audit', label: '审计日志' },
 ]
@@ -22,12 +30,12 @@ const SIMPLE_TABS = [
 export default function App() {
   const [mode, setMode] = useState(
     () => localStorage.getItem('ua-mode') || 'simple')
-  const [tab, setTab] = useState(mode === 'simple' ? 'scenes' : 'tools')
+  const [tab, setTab] = useState('orchestrate')
 
   function switchMode(next) {
     setMode(next)
     localStorage.setItem('ua-mode', next)
-    setTab(next === 'simple' ? 'scenes' : 'tools')
+    setTab(next === 'simple' ? 'orchestrate' : 'monitor')
   }
 
   return (
@@ -46,16 +54,19 @@ export default function App() {
         <a className="gh" href="https://github.com/tb202420/uniagent-hub" target="_blank" rel="noreferrer">GitHub</a>
       </header>
       <main>
-        {tab === 'scenes' && <ScenesPage />}
+        {tab === 'monitor' && <ConsolePage />}
+        {tab === 'control' && <TerminalPage />}
+        {tab === 'orchestrate' && <ScenesPage />}
         {tab === 'recent' && <RecentRuns />}
-        {tab === 'tools' && <ToolsPage />}
         {tab === 'workflow' && <WorkflowPage />}
+        {tab === 'tools' && <ToolsPage />}
         {tab === 'security' && <SecurityPage />}
         {tab === 'audit' && <AuditPage />}
       </main>
-      <footer>React 19 + React Flow 12（ELK 布局）· {mode === 'simple'
-        ? '场景模板 + 写操作确认（渐进自主权）'
-        : '工具 / DAG / 安全 / 审计'}</footer>
+      <footer>
+        监视层（流式 + RAF + 瀑布图）· 控制层（xterm + HITL 审批）· 编排层（场景 + DAG）
+        {' '}· OTel GenAI SemConv 数据源
+      </footer>
     </div>
   )
 }

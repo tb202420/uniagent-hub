@@ -3,13 +3,20 @@
 ![CI](https://github.com/tb202420/uniagent-hub/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/github/license/tb202420/uniagent-hub)
 ![Python](https://img.shields.io/badge/python-3.12%20%7C%203.14-blue)
-![Tests](https://img.shields.io/badge/tests-261%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-321%20passed-brightgreen)
+
+> **参赛版本**：v3.0 三层控制台 —— GitHub branch [`v3.0`](https://github.com/tb202420/uniagent-hub/tree/v3.0) ·
+> tag [`v3.0-three-layer-console`](https://github.com/tb202420/uniagent-hub/releases/tag/v3.0-three-layer-console)
 
 > **AI 世界的 USB-C 接口**：无论背后是传感器、命令行工具还是云服务，插上来就能用。
 >
-> 科创比赛参赛项目 · 阶段 0-3 已完成（**261 项测试全部通过**（定稿基线 216 + 增强批次 45，见 docs/口径速查表.md §6） · 工具全量 22 个（软件档 11 + 硬件档 8 + 温室模拟节点 3）/ 演示档 14 个 · **6 类适配器已实装**（第 6 类 WebSocket 2026-10-24 补全，默认档不加载） · 工作流闭环 · ESP32 真机端到端实测）·
-> 演示级就绪（一键启动 + 断网降级 + 3 次彩排 8/8 + 本地 LLM 接入）·
-> 改进方案第 1 批已落地（FastMCP 4 前端 / 元工具渐进发现 / 生命周期与插件 / Schema 签名与审计哈希链 / 硬件测试档）
+> 科创比赛参赛项目 · 阶段 0-3 + v3.0 三层控制台已完成（**321 项测试全部通过**
+> （v2.0 收口基线 261 + v3.0 批次 60，见 docs/口径速查表.md §6.1） · 工具全量 22 个
+> （软件档 11 + 硬件档 8 + 温室模拟节点 3）/ 演示档 14 个 · **6 类适配器已实装**
+> （第 6 类 WebSocket 2026-10-24 补全，默认档不加载） · 工作流闭环 · ESP32 真机端到端实测）·
+> 演示级就绪（一键启动 + 断网降级 + **一键审批闭环 10/10 连跑**）·
+> v3.0 已落地（监视层流式 + RAF + 瀑布图 / 控制层 xterm + HITL 审批 / 编排层场景 + DAG；
+> 事件 WS · UniSpec v0.4 · A2A 最小端点 · OTel GenAI SemConv · pyproject 打包）
 
 > **口径说明（SIL/HIL）**：USB 摄像头、智能插座、手机传感器、PC 监控为 **HIL（真实硬件在环）**；
 > 温室节点日常以 **SIL（软件在环模拟器）** 为主验证路径，真机固件已完成单轮端到端实测（回执均值 152ms、自动停泵 5.1s）——定义与数字详见[口径速查表 §6.3](docs/口径速查表.md)。
@@ -18,10 +25,10 @@
 
 ## 核心主张
 
-1. **一规范多类型** — 设备 / CLI / REST / 脚本 / 数据库统一用 `UniSpec`（v0.3.0）描述能力；
+1. **一规范多类型** — 设备 / CLI / REST / 脚本 / 数据库 / WebSocket 统一用 `UniSpec`（v0.4.0）描述能力；
 2. **Agent 只认识 MCP** — 上层 Agent（LLM 或脚本）仅通过 `tools/list`、`tools/call` 调用一切，无法区分背后资源类型；
-3. **安全内建** — 参数校验、命令注入防护、权限分级、限流、审计从第一行代码开始，Guard 管道对 LLM 与脚本一视同仁；
-4. **无状态网关** — 自研 JSON-RPC 2.0 路由（零 MCP SDK 依赖），可水平扩展。
+3. **安全内建** — 参数校验、命令注入防护、权限分级、限流、**HITL 审批**、审计从第一行代码开始，Guard 管道对 LLM 与脚本一视同仁；
+4. **无状态网关 + 三层控制台** — 自研 JSON-RPC 2.0 路由（零 MCP SDK 依赖）；监视 / 控制 / 编排三层共享一条事件流。
 
 ## 演示场景：智能办公环境管理
 
@@ -29,6 +36,31 @@
 
 一次 `run_workflow("office_cooling")` 完成 3 步闭环（实测约 4s）：
 `get_temperature(29.9°C) → get_weather → ac_control(on, 27°C)`。
+
+## v3.0 一键闭环：AI 想动手之前，先问你一句（约 11 秒）
+
+```powershell
+# 自动起本地 Broker + 温室模拟器（SIL）+ Hub，自动审批，10/10 连跑通过
+.\.venv\Scripts\python.exe -m demo.irrigation_approval
+
+# 手动模式：不自动审批，在 SPA 控制层点「允许 / 拒绝 / 改成 60 秒」
+.\.venv\Scripts\python.exe -m demo.irrigation_approval --manual
+
+# 真机离线兜底：先等真机 8 秒，超时自动切换模拟器（日志标注 SIL 兜底）
+.\.venv\Scripts\python.exe -m demo.irrigation_approval --real --device-timeout 8
+
+# 两次演示之间重置（<5 秒）
+powershell -ExecutionPolicy Bypass -File demo\reset.ps1
+```
+
+链路：`场景（智能灌溉）→ script Agent 计划（13 个 token 事件）→ 读土壤湿度
+→ 读光照 → control_pump → Guard HITL 审批（暂停等待）→ 批准 → MQTT 命令
+→ 温室节点动作 → 审计哈希链校验`。
+
+> **诚实标注**：默认设备是 **SIL 模拟器，不是真机**；脚本与日志都会打印
+> 「设备模式：SIL（模拟器，非真机）」。真机 152ms 与 SIL 100–141ms 的定义不同，
+> 见[口径速查表 §6.3](docs/口径速查表.md)。操作手册见
+> [docs/demo_操作手册.md](docs/demo_操作手册.md)。
 
 ## 快速开始（Python 直跑，主路径）
 
@@ -121,10 +153,13 @@ docker compose -f deploy/docker-compose.yml up -d --build
 ```
 uniagent-hub/
 ├── core/                  # 核心层
-│   ├── unispec/           #   UniSpec v0.3.0 模型与校验
+│   ├── unispec/           #   UniSpec v0.4.0 模型与校验（协议绑定/控制机制）
 │   ├── registry/          #   工具注册中心（SQLite WAL 持久化）
-│   ├── gateway/           #   MCP 网关（JSON-RPC 2.0 + Guard 横切管道）
-│   ├── guard/             #   参数校验 / 注入拦截 / 三维限流 / 审计
+│   ├── gateway/           #   MCP 网关（JSON-RPC 2.0 + Guard + 事件总线 + WS）
+│   ├── guard/             #   参数校验 / 注入拦截 / 三维限流 / HITL 审批 / 审计
+│   ├── observability/     #   OTel GenAI SemConv 追踪记录器（本地 span + SDK 双写）
+│   ├── terminal/          #   交互终端（token / 输入 Guard / 会话管理）
+│   ├── a2a/               #   A2A 最小端点（任务委派 + 状态查询）
 │   ├── workflow/          #   工作流引擎（拓扑排序 + 自研安全表达式，零 eval）
 │   └── cli_gen/           #   CLI 反向生成器
 ├── adapters/              # 适配器层（统一 discover/list_tools/call_tool 协议）
@@ -133,15 +168,17 @@ uniagent-hub/
 │   ├── rest_adapter/      #   REST API（OpenAPI 导入 + SSRF 防护）
 │   ├── script_adapter/    #   本地脚本（路径沙箱）
 │   └── database_adapter/  #   数据库（SQLite 只读查询 + 受限写，B9）
-├── agent/                 # Demo Agent（LLM 可插拔 + 脚本降级）
-├── web/audit_dashboard/   # 审计 Web 界面（FastAPI + 纯 HTML；JSON API 供 SPA）
-├── web/spa/               # 管理控制台（React 19 + React Flow 12；npm run build 后 /spa）
-├── generated_cli/        # CLI 反向生成产物（8 个脚本）
-├── scripts/              # 一键演示启动 / 预热 / 彩排评分 / Ollama 预热 / 本地 broker / Mock API
-├── demo_fallback/        # 演示降级素材（预录视频位 + 应急预案）
+├── agent/                 # Agent 插件宿主（script / ollama / openai-compat + entry_points）
+├── web/audit_dashboard/   # 审计 Web 界面（FastAPI + 纯 HTML；v3.0 JSON/WS 代理）
+├── web/spa/               # 三层控制台（React 19 + React Flow 12 + xterm.js + Zustand）
+├── demo/                  # v3.0 一键闭环（irrigation_approval.py + reset）
+├── generated_cli/         # CLI 反向生成产物（8 个脚本）
+├── scripts/               # 一键演示启动 / 预热 / 彩排评分 / Ollama 预热 / 本地 broker / Mock API
+├── demo_fallback/         # 演示降级素材（预录视频位 + 应急预案）
 ├── deploy/                # Dockerfile.hub + docker-compose.yml
 ├── docs/                  # PRD / 规范 / 架构 / API 契约 / 测试报告 / 证据 / 演示脚本
-├── tests/                 # 216 项测试（unit / integration / 适配器契约 / 安全）
+├── tests/                 # 321 项测试（unit / integration / 适配器契约 / 安全）
+├── pyproject.toml         # v3.0 打包元数据（entry_points 组 + console script）
 └── main.py                # 启动入口
 ```
 
@@ -197,10 +234,17 @@ uniagent-hub/
 | 文档 | 说明 |
 |---|---|
 | [docs/prd.md](docs/prd.md) | 产品需求与比赛评分点映射 |
-| [docs/unispec.md](docs/unispec.md) | 统一能力描述规范 v0.3.0（冻结） |
+| [docs/unispec.md](docs/unispec.md) | 统一能力描述规范 v0.4.0（冻结） |
 | [docs/architecture.md](docs/architecture.md) | 架构设计与 ADR（含 Guard 顺序设计说明） |
-| [docs/api.md](docs/api.md) | MCP Gateway + 适配器接口契约 v0.5（含变更记录） |
-| [docs/demo_script.md](docs/demo_script.md) | 5 分钟演示脚本 v1.2（7 幕 300s 配时 + LLM 加分环节 + 9 项评分表 + 降级方案） |
+| [docs/api.md](docs/api.md) | MCP Gateway + 适配器接口契约 v0.6（含 v3.0 增量端点） |
+| [docs/测试报告_v3.0.md](docs/测试报告_v3.0.md) | v3.0 测试报告（321 项 / 72.1% 行覆盖 / 复现命令 / 诚实边界）；可打印版 [HTML](docs/测试报告_v3.0.html) |
+| [docs/答辩6分钟_排练稿.md](docs/答辩6分钟_排练稿.md) | 六分钟配时、逐段口播、拒绝/改参分支、3/3 技术排练结果 |
+| [docs/附件材料_v3.0.md](docs/附件材料_v3.0.md) | 评审附件三件套：失败时间线 / 10 连跑表 / SIL-HIL 说明 |
+| [docs/查新点与对比文献.md](docs/查新点与对比文献.md) | 查新报告工作稿：检索式、竞品逐个对比、组合创新结论 |
+| [docs/demo_操作手册.md](docs/demo_操作手册.md) | v3.0 一键闭环操作手册（正常 + 离线兜底 + 手动审批 + 10 连跑） |
+| [docs/试错记录.md](docs/试错记录.md) | 研究过程与 5 个真实失败/修正（含证据） |
+| [docs/原创性边界说明.md](docs/原创性边界说明.md) | 开源组件 vs 自研逻辑的一页纸边界 |
+| [docs/demo_script.md](docs/demo_script.md) | 5 分钟全栈演示脚本 v1.4（7 幕 + LLM 加分 + 降级方案；六分钟版见排练稿） |
 | [docs/demo_video_guide.md](docs/demo_video_guide.md) | 演示视频录制流程（逐幕操作 + 讲解词 + 时间分配 + 人工操作清单） |
 | [docs/test-reports/demo_rehearsal_log.md](docs/test-reports/demo_rehearsal_log.md) | 3 次彩排记录（均 8/8）与问题清单 |
 | [docs/evidence/README.md](docs/evidence/README.md) | 过程证据索引（每个文件对应 dev_log 哪张表 + 复现命令） |
@@ -227,3 +271,27 @@ uniagent-hub/
 | Prometheus 指标 | `GET /metrics`（uniagent_tool_calls_total / guard_blocked_total / tool_latency_seconds / workflow_runs_total） |
 | 场景模板 | `core/workflow/scenes.yaml`（5 个预置场景；SPA 简易模式一键执行 + 写操作确认卡片） |
 | 桌面档 | `desktop/`（Tauri 2 外壳 + PyInstaller sidecar 脚手架；Actions 手动触发 Desktop Build） |
+
+## v3.0 能力（2026-11-07 三层控制台批次）
+
+| 层 | 能力 | 用法 / 入口 |
+|---|---|---|
+| 监视层 | 流式 token + RAF 帧批处理；工具调用四阶段；span 瀑布图（默认 4 个关键 span） | `/spa/` →「① 监视层」；`/ws/events`；`/traces` |
+| 控制层 | xterm.js 交互终端；HITL 审批卡片（允许 / 拒绝 / 改成 60 秒）；Agent ↔ 人工接管 | `/spa/` →「② 控制层」；`/ws/terminal`；`/hitl/decide` |
+| 编排层 | 首页问题陈述 +「试试看」；场景卡片；React Flow DAG | `/spa/` →「③ 编排层」 |
+| 协议 | UniSpec v0.4.0（`protocol_bindings` / `control_mechanisms` / `self_description`） | `tools/list` 的 `_meta.unispec` |
+| 通信 | A2A 最小端点（任务委派 + 状态查询） | `POST /a2a/tasks`、`GET /a2a/tasks/{id}` |
+| 可观测 | OTel GenAI SemConv（`gen_ai.*`）+ SDK 双写；FastAPI 插桩 | `/traces`、`HUB_OTEL_ENDPOINT` |
+| 安全 | 终端 token 单次有效 / 60s TTL / `Sec-WebSocket-Protocol`；审批审计入哈希链 | `/terminal/token`；`tool=hitl.approval` |
+| 打包 | `pyproject.toml`（entry_points 两组 + `uniagent-hub` 命令） | `pip install -e .`（可选） |
+
+## 开发时间线
+
+| 时间 | 里程碑 | 证据 / 标签 |
+|---|---|---|
+| 2026-09-25 ~ 09-26 | v1.0 自研 JSON-RPC 网关、六类能力模型雏形；UniSpec v0.1/v0.2 冻结 | `docs/unispec.md` §11 |
+| 2026-10-03 ~ 10-04 | FastMCP 4 前端、4 元工具渐进发现、Ed25519 签名、审计哈希链、硬件测试档 | `docs/evidence/` |
+| 2026-10-05 | 研究报告定稿，测试基线 **216 项** | 完整报告在工作区（含个人信息，未公开） |
+| 2026-10-24 | ESP32 真机端到端（152ms/5.1s/100ms）、第 6 类 WebSocket、Agent 插件宿主、JWT、并行工作流；测试 **261 项** | v2.0 收口（公开仓库 main 历史） |
+| 2026-10-26 ~ 11-06 | 比赛材料收口（海报 v2.2 / 答辩讲稿 / 口径速查表） | 海报等比赛材料在工作区（未公开） |
+| **2026-11-07** | **v3.0 三层控制台**：HITL / PTY 终端 / 事件 WS / OTel / A2A / UniSpec v0.4 / pyproject；测试 **321 项**；演示闭环 **10/10** | tag `v3.0-three-layer-console` |

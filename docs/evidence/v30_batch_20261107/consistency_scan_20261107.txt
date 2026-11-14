@@ -1,0 +1,45 @@
+UniAgent Hub 材料一致性扫描记录（2026-11-07）
+工具：data/_scan_materials.py（md / docx / pptx 全量文本 + docx 批注与修订标记检查）
+
+一、扫描范围
+  - docs/*.md 全量（含 README/CHANGELOG/AUTHORSHIP）
+  - docs/研究报告.docx（旧版 10-24）、docs/研究报告_v3.0.docx（新版）
+  - docs/答辩PPT.pptx（改前）
+
+二、修正动作（已执行）
+  1. docs/defense_script.md P10：216 裸写 → 321（带 v2.0 基线 261 + v3.0 批次 +60 语境）。✅
+  2. docs/roadmap.md 4.6：补"定稿基线"字样；查新报告状态 ⬜ → ✅（工作稿，待机构复核）。✅
+  3. docs/口径速查表.md §4 示例句式：加"10-05 定稿句式，仅历史示例；现行 321"批注。✅
+  4. PPT（v2 → 更新数字）：备份 docs/答辩PPT_v2_备份.pptx；
+     封面"261 项（定稿 216+45）"→"321 项（v2.0 收口 261 + v3.0 批次 60）"；
+     P10 大数字 261→321 且括号改"v2.0 基线 261 + v3.0 批次 60"；P14"261 项测试"→"321 项测试"。✅
+  5. 试错记录/附件时间线中的本地 commit 短哈希（09015cb/f68cad8/7888630/a0f740f）
+     改为可公开核查的"分支 v3.0 / tag v3.0-three-layer-console + 测试文件路径"，
+     并加公开快照说明（研究报告 §八、附件材料、dev_log §17 已同步）。✅
+     依据：git merge-base --is-ancestor 09015cb v3.0-public → False（本地哈希不在公开分支）。
+  6. 查新报告：新增"三、与研究报告创新点的对应关系（映射说明）"，并重排后续章节编号。✅
+  7. 研究报告图表清单：补充 v3.0 增补（5.10 + 附录 B 表 B.1/B.3）。✅
+
+三、判定为"安全命中"（不改，说明如下）
+  - 口径速查表 §3：禁用清单内的划线废止数字，属清单本体。✅
+  - 研究报告/试错记录/defense_script 中"全平台 PTY / A2A / 桌面版"仅出现在否定句
+    或禁用清单（"不写…""我没有硬说…"）。✅
+  - dev_log/design/improvement_plan 中的 175/180/216/261：均有日期章节语境的历史记录，
+    属过程证据，改写即篡改历史；不改，仅在映射表 §5 声明其历史语义。✅
+  - "AI 生成的字符串"（研究报告 §4.6）：指 eval 危险来源，非披露标记误用。✅
+  - "占位/占位符"命中均为技术语义（{{params.x}}、CLI 模板占位符、封面高度占位）。✅
+
+四、docx 专项检查
+  - 批注：无 comments.xml。✅
+  - 修订标记：document.xml 无 w:ins / w:del。✅
+  - 正文无"含AI生成"字样。✅
+  - 页眉页脚/隐藏文字：python-docx 无法完整枚举，需在 Word 中人工目视（转人工）。
+
+五、待人工（记录在案）
+  1. docs/研究报告.docx（旧版）仍含 261 正文口径——该文件为 10-24 旧产物且含
+     个人信息，约定**不使用**；提交用 研究报告_v3.0.docx。若需提交旧版名，需改名替换。
+  2. 研究报告_v3.0.docx 重新导出：本次因文件被 Word 占用（PermissionError）未能
+     覆盖最新 md；解锁后执行：
+     C:\Users\admin\AppData\Local\Programs\Python\Python314\python.exe -m scripts.md_to_docx docs\研究报告.md "docs\研究报告_v3.0.docx"
+  3. PPT 已更新数字；如需 v3.0 页级改版由人工在 PowerPoint 中复核布局。
+  4. 第 33 页表 15 目视与目录页码更新：Word/PDF 人工步骤。

@@ -35,9 +35,12 @@ from core.adapters.plugins import (
     adapter_shutdown, adapter_startup, load_adapter_plugins,
 )
 from core.gateway.meta_tools import MetaTools
+from core.gateway.event_bus import default_bus
 from core.gateway.server import MCPGateway, create_app
 from core.guard.audit import AuditLogger, AuditStore
+from core.guard.hitl import ApprovalBroker
 from core.guard.ratelimit import RateLimiter
+from core.observability.tracer import default_tracer
 from core.registry.registry import ToolRegistry
 from core.registry.store import SQLiteStore
 from core.workflow.engine import WorkflowEngine
@@ -147,7 +150,11 @@ def build_hub(broker: str, cli_configs: list[Path],
 
     # 工作流引擎（与网关互引：引擎经网关执行每步，Guard/审计不旁路）
     limiter = RateLimiter()
-    gateway = MCPGateway(registry, audit, workflow_engine=None, rate_limiter=limiter)
+    # v3.0：HITL 审批闸门 / 追踪 / 事件总线（默认仅 control_pump 触发审批）
+    approvals = ApprovalBroker(bus=default_bus, audit=audit)
+    gateway = MCPGateway(registry, audit, workflow_engine=None,
+                         rate_limiter=limiter, approvals=approvals,
+                         tracer=default_tracer, bus=default_bus)
     engine = WorkflowEngine(gateway)
     gateway.workflow = engine
     engine.register_workflows(_load_workflows())
@@ -181,7 +188,8 @@ def build_hub(broker: str, cli_configs: list[Path],
         print("[hub] 渐进式工具发现已启用（tools/list 返回 4 个元工具）")
 
     app = create_app(registry, audit, workflow_engine=engine,
-                     rate_limiter=limiter, gateway=gateway, adapters=adapters)
+                     rate_limiter=limiter, gateway=gateway, adapters=adapters,
+                     approvals=approvals)
     return HubRuntime(registry=registry, audit=audit, gateway=gateway,
                       engine=engine, limiter=limiter, adapters=adapters,
                       app=app, mqtt_adapter=mqtt_adapter)
@@ -209,6 +217,12 @@ def main() -> None:
     parser.add_argument("--no-plugins", action="store_true",
                         help="不加载 entry_points 适配器插件")
     args = parser.parse_args()
+
+    # A2A / Agent 插件回调自身的地址（默认本机端口；显式环境变量优先）
+    os.environ.setdefault(
+        "HUB_SELF_URL",
+        f"http://127.0.0.1:{args.port}" if args.host in ("0.0.0.0", "::")
+        else f"http://{args.host}:{args.port}")
 
     broker = None if args.no_mqtt else args.broker
     # 断网降级：HUB_REST_SPEC 可换 Spec 文件（兼容旧变量），

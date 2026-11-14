@@ -1,0 +1,31 @@
+UniAgent Hub 演示稳健性压力实测（2026-11-07）
+
+一、冷启动 ×3 / 热启动 ×3（approved 分支；冷=先 reset，热=不 reset 连续跑）
+冷1  wf=5.521s  dev=2.162s  wait=3.076s  chain ok  exit 0
+冷2  wf=5.484s  dev=2.152s  wait=3.106s  chain ok  exit 0
+冷3  wf=5.482s  dev=2.111s  wait=3.057s  chain ok  exit 0
+热1  wf=5.482s  dev=2.149s  wait=3.098s  chain ok  exit 0
+热2  wf=5.475s  dev=2.132s  wait=3.102s  chain ok  exit 0
+热3  wf=5.464s  dev=2.107s  wait=3.058s  chain ok  exit 0
+结论：6/6 全部 exit 0；工作流 5.46–5.52s、审批等待 3.06–3.11s、审计链全 ok；
+无"第一次必慢、第二次才正常"异常；热启动（库留存）无需重建设备即稳定完成。
+口径注意：本批设备就绪 2.11–2.16s（晚高峰时段实测），与 10 连跑基线 1.97–2.02s
+分属两次会话，分别记录、不混用；权威值仍以口径速查表 §7 的 10 连跑区间为准。
+
+二、端口冲突安全（1884/8021 被无关进程占用时执行 reset）
+- reset 退出码 0，耗时 0.21–0.43s；
+- 代码审查：reset.ps1 只清理 data/demo_runs/irrigation_approval_*.pids 中记录的
+  演示自身进程，不扫描端口、不误杀无关进程；
+- 实测：8021 被外部监听占住期间 reset 正常完成且未触碰外部监听（观察窗口内进程行为
+  与代码语义一致）。
+现场兜底预案（已写入答辩6分钟_排练稿 §5 与手册 G）：端口被占 → 先 reset；仍占用则
+查 PID 手动处理；极端情况切预录视频 + 展示 docs/evidence 原始日志。
+
+三、断网 / 投影分辨率 / 录屏一致性
+- 断网 -Offline：一键闭环本就自起本地 broker（mqtt://127.0.0.1:1884），不依赖公网；
+  未做真实断网（人工项，需物理断网）。
+- 投影 1024×768/720p 目视：需人工接投影检查（审批卡、xterm≥16pt、瀑布图 4 span、
+  首页首屏）；口径备好"单次 ±0.3s，10 连跑 10.8–11.1s"。
+
+原始数据：data/demo_runs/irrigation_approval_20261107_221816…221925.jsonl、
+data/coldhot_result.txt、data/hold1.log / hold2.log。

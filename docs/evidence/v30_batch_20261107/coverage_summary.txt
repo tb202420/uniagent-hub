@@ -1,0 +1,25 @@
+UniAgent Hub v3.0 覆盖率摘要（2026-11-07）
+工具：coverage.py via pytest-cov 7.1.0；命令：
+  pytest -q --cov=core --cov=adapters --cov=agent --cov=web
+         --cov-report=term --cov-report=json:data/coverage-v30.json
+
+TOTAL  72.1%  (3221 / 4467 statements)
+
+关键模块：
+  core/unispec/models.py          98%
+  core/guard/audit.py             92%
+  core/guard/attestation.py       93%
+  core/guard/hitl.py              84%
+  core/guard/validation.py        84%
+  core/guard/ratelimit.py         93%
+  core/observability/tracer.py    88%
+  core/terminal/tokens.py         88%
+  core/terminal/session.py        69%  (Windows 管道实测；POSIX pty 由 CI ubuntu 覆盖)
+  core/gateway/server.py          81%
+  core/workflow/engine.py         81%
+  core/workflow/expr.py           94%
+  core/registry/store.py          90%
+  web/audit_dashboard/app.py      60%  (纯 HTML 页面渲染与 Hub 在线分支)
+
+说明：行覆盖率，不是分支覆盖率；不得表述为"代码正确性 72%"。
+原始 JSON：data/coverage-v30.json（未入库，可由上面命令重建）。

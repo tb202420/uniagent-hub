@@ -1,0 +1,21 @@
+UniAgent Hub v3.0 离线兜底与重置实测（2026-11-07）
+
+场景 A：真机离线兜底
+命令：.\.venv\Scripts\python.exe -m demo.irrigation_approval --real --device-timeout 4
+输出（节选）：
+  [demo] 等待真机上线（4.0s）…
+  [demo] 真机未上线 → 已切换模拟设备（SIL 兜底）
+  [demo] Agent 结果: ok=True
+  [demo] 审批等待 2.999s
+  [demo] 审计链: ok · 审批记录 14 条（累计历史）
+说明：本机没有可上线的真机，4s 超时后按设计切换模拟器；
+      设备模式如实写为 SIL（真机离线兜底），不冒充 HIL。
+
+场景 B：两次演示之间重置
+命令：powershell -ExecutionPolicy Bypass -File demo\reset.ps1
+输出：
+  [reset] 演示进程已清理，审批状态/演示库/审计已重置（证据日志保留在 data/demo_runs）
+耗时：0.59s（目标 <5s）
+退出码：0
+
+注意：reset.ps1 以 UTF-8 BOM 保存，兼容 Windows PowerShell 5.1 的中文解析。

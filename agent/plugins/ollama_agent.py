@@ -26,6 +26,11 @@ class OllamaAgent(AgentAdapter):
     def __init__(self) -> None:
         self.base = os.environ.get("OLLAMA_BASE", "http://localhost:11434").rstrip("/")
         self.model = os.environ.get("OLLAMA_MODEL", "gemma4local:latest")
+        # 上下文窗口必须显式设置：Ollama 默认只加载 4096，工具 Schema + 多轮
+        # 返回值溢出后模型会遗忘目标并重复退化（实测结论，见研究报告 §5.7）。
+        # 16384 为 RTX 5060 Ti 16GB 实测稳定值。
+        self.num_ctx = int(os.environ.get("OLLAMA_NUM_CTX", "16384"))
+        self.keep_alive = os.environ.get("OLLAMA_KEEP_ALIVE") or None
 
     def health_check(self) -> dict[str, Any]:
         try:
@@ -58,18 +63,26 @@ class OllamaAgent(AgentAdapter):
                 {"role": "user", "content": goal},
             ]
             steps: list[dict[str, Any]] = []
+            any_failed = False
             for i in range(_MAX_STEPS):
                 if cancel and cancel.is_set():
                     return {"ok": False, "plan": {"kind": "llm"}, "steps": steps,
                             "summary": "已取消"}
-                r = c.post(f"{self.base}/api/chat", json={
+                req: dict[str, Any] = {
                     "model": self.model, "messages": messages, "tools": tools,
-                    "stream": False, "options": {"temperature": 0.0},
-                }, timeout=120)
+                    "stream": False,
+                    "options": {"temperature": 0.0, "num_ctx": self.num_ctx},
+                }
+                if self.keep_alive:
+                    req["keep_alive"] = self.keep_alive
+                r = c.post(f"{self.base}/api/chat", json=req, timeout=120)
                 msg = r.json().get("message", {})
                 calls = msg.get("tool_calls") or []
                 if not calls:
-                    return {"ok": True, "plan": {"kind": "llm"}, "steps": steps,
+                    # 有工具步骤失败过（例如 control_pump 被审批拒绝 → 1003），
+                    # 说明目标未达成：ok=False 供分支判定复用，summary 如实保留模型表述
+                    return {"ok": not any_failed, "plan": {"kind": "llm"},
+                            "steps": steps,
                             "summary": (msg.get("content") or "")[:300]}
                 call = calls[0]                       # 串行：一轮一个
                 fn = (call.get("function") or {})
@@ -84,6 +97,7 @@ class OllamaAgent(AgentAdapter):
                                               "caller": "agent:ollama",
                                               "permission_level": permission})
                 ok = not resp.get("isError")
+                any_failed = any_failed or not ok
                 steps.append({"step": i + 1, "tool": name, "ok": ok,
                               "output": _text(resp)[:200]})
                 messages.append(msg)

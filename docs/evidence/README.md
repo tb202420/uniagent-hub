@@ -32,6 +32,24 @@
 | `llm_stability/SUMMARY.md` | §9.2 #18 + §9.3 | 中间批次**汇总统计**（temp=0.3 · 演示目标：原生 3/5、数值保真 0/5）。逐次原始日志已按精简原则删除，保留了暴露"模板 token 泄漏被当结论打印""模型谎称已执行未执行操作"两类问题的结论性描述 |
 | `llm_stability_branch/SUMMARY.md` | §9.2 #19 | 中间批次**汇总统计**（temp=0.3 · 条件分支：分支判断 3/3）。这是串行强制修复有效性的首个证据 |
 
+### v3.0 · 三层控制台（2026-11-07）
+
+| 目录/文件 | 对应文档 | 说明 |
+|---|---|---|
+| `v30_batch_20261107/README.md` | `docs/测试报告_v3.0.md` | v3.0 证据包索引（文件清单 + 复现命令 + 诚实边界） |
+| `v30_batch_20261107/pytest_v30.xml` | 同上 | 全量 JUnit：321 项，0 失败/0 错误/0 跳过 |
+| `v30_batch_20261107/demo_close_loop_events.jsonl` | `docs/demo_操作手册.md` | 一次闭环的完整事件流（agent.token / tool.stage / hitl / span / terminal.command） |
+| `v30_batch_20261107/demo_close_loop_audit.jsonl` | `docs/口径速查表.md` §7 | 演示审计记录（`tool=hitl.approval`，含哈希链字段） |
+| `v30_batch_20261107/summary_10runs.txt` | 同上 | 连续 10 次连跑（10/10）与工作流/审批/设备就绪数字 |
+| `v30_batch_20261107/branch_rejected_and_modify.txt` | `docs/答辩6分钟_排练稿.md` | 拒绝 / 改成 60 秒分支的实测、审计参数与成功判定 |
+| `v30_batch_20261107/rehearse6_results.txt` | 同上 | 六分钟答辩技术排练 3/3（允许 11.6s / 拒绝 11.1s / 改 60s 11.5s） |
+| `v30_batch_20261107/fallback_and_reset.txt` | `docs/demo_操作手册.md` | 真机离线 SIL 兜底 + reset 0.59s |
+| `v30_batch_20261107/coverage_summary.txt` | `docs/测试报告_v3.0.md` | 行覆盖率 72.1% 与关键模块明细 |
+
+> **v3.0 口径纪律**：`control_pump` 的 100–141ms 是 **SIL 模拟器写回执**；
+> 真机 152ms / 5.1s 来自 `real_device_e2e_20261024.txt`，本次未重测。
+> 交互终端在 Windows 是持久管道会话（`mode=pipe`），不是 PTY。
+
 ## 二、精简原则（2026-09-26 归档整理）
 
 - **完整保留**：最终确认批次（`llm_stability_final/` + `llm_stability_final_branch/`）

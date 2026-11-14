@@ -1,0 +1,48 @@
+UniAgent Hub v3.0 推送与 Tag 记录（2026-11-07）
+
+远程仓库：https://github.com/tb202420/uniagent-hub
+推送方式：公开安全分支（远程 main 保持原样，未合并、未强推）
+
+远程引用（随批次推进；最新见文末）：
+  refs/heads/v3.0 = f33807c → 5beb33f → baa6f58 → 07e8a27 → a93da63（Ollama 视频批次已推）
+  refs/tags/v3.0-three-layer-console 与分支头部同步强制更新（同上推进）
+  07e8a27 内容 = ba9fd1b（口径一致性收口）+ 冷热/端口实测证据、口径映射表与收口清单最终补录。
+  a93da63 内容 = 本地 Ollama 视频演示双方案与实测证据。
+
+早段网络故障说明（已恢复）：
+  2026-11-07 22:06 起本机连接 github.com:443 超时/重置（网络环境问题，与仓库无关），
+  23:00 后网络恢复，上述推送一次性成功；此后无需再重试，命令仅存档：
+    git checkout v3.0-public
+    git push origin v3.0-public:v3.0
+    git push -f origin v3.0-three-layer-console
+    git checkout main
+
+2026-11-12 晚段再次网络中断（待重试）：
+  本地 v3.0-public = ca3ccbe（研究报告修正的收口清单同步），tag 已本地前移至 ca3ccbe；
+  远程仍为 a93da63。网络恢复后执行上文同一组重试命令即可，无其他改动。
+
+2026-11-13 网络恢复，已推送成功：
+  refs/heads/v3.0 = e3bd315；refs/tags/v3.0-three-layer-console = e3bd315
+  内容包含：研究报告修正记录、表 15 布局修复说明、查新报告填报版指针。
+  GitHub API 复核：分支 v3.0 与 tag 均存在（a93da63 阶段核验，之后推进到 e3bd315）。
+
+分支内容：
+- v3.0 代码、测试、三层控制台、HITL、终端、OTel、A2A、UniSpec v0.4、pyproject；
+- 公开文档：测试报告、六分钟答辩稿、查新报告（组合创新）、附件三件套、v3.0 证据包、
+  口径映射表与收口清单；
+- 不含：docs/研究报告.md、海报方案、比赛材料总结等个人/比赛材料
+  （远程 .gitignore 保持原有公开排除规则）。
+
+历史说明：
+- 本地 main 与 origin/main 没有共同祖先（两套独立历史）；
+- 因此没有直接 push main，而是以 origin/main 为基线创建公开安全快照 v3.0；
+- 远程 main 的原有 v2.0 提交区间不受影响。
+
+验证：
+  git ls-remote origin "refs/heads/v3.0" "refs/tags/v3.0-three-layer-console"
+  → 两个引用均存在（见上）。
+
+人工后续（可选）：
+- 在 GitHub 上发起 v3.0 → main 的 Pull Request（页面提示：
+  https://github.com/tb202420/uniagent-hub/pull/new/v3.0）；
+- 若需要把研究报告等比赛材料公开，应先脱敏（姓名/学校/教师/内网信息）再单独处理。

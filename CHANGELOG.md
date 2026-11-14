@@ -6,6 +6,64 @@
 
 ## [Unreleased]
 
+### 新增（v3.0 三层控制台批次，2026-11-07）
+
+- **协议层**：UniSpec v0.4.0 新增 `version` / `protocol_bindings` /
+  `control_mechanisms` / `self_description`（全部可选，缺省按资源类型派生；
+  `tools/list` 携带 `_meta.unispec`）
+- **Hub 核心层**：事件总线 `/ws/events`（span / 工具四阶段 / HITL / token /
+  终端字节流 / A2A 状态，单连接三视图共享）+ HTTP 轮询兜底 `/events`
+- **HITL 审批**：`require_approval` 闸门（默认仅 `control_pump`，write/admin 触发，
+  只读自动放行；拒绝/超时复用 1003 不新增错误码；每次决策入审计哈希链）
+- **交互终端**：`/terminal/token`（单次有效 + 60s TTL + `Sec-WebSocket-Protocol`）、
+  `/ws/terminal`、输入 Guard（sudo / 网络外联 / 破坏性命令拦截 + 审计）；
+  POSIX 为 stdlib `pty`，Windows 为持久管道会话（如实标注非 PTY）
+- **可观测**：OTel GenAI SemConv 字段（`gen_ai.system` / `request.model` /
+  `usage.input_tokens` / `usage.output_tokens` / `response.finish_reasons`）+
+  本地 span 存储 `/traces` + OTel SDK 双写 + FastAPI 插桩
+- **A2A 最小端点**：`POST /a2a/tasks`（202 + task_id）/ `GET /a2a/tasks/{id}`
+  （submitted/working/completed/failed）；不扩展完整生命周期
+- **前端三层控制台**：监视层（RAF token 批处理、四阶段状态条、span 瀑布图默认 4 个关键
+  span）、控制层（xterm.js + 审批卡片 + Zustand 接管状态机）、编排层（问题陈述首页 +
+  「试试看」+ 场景卡 + React Flow DAG）；xterm 动态 import 代码分割
+- **打包**：`pyproject.toml`（entry_points 两组 `uniagent_hub.adapters` /
+  `uniagent_hub.agent_adapters`、console script `uniagent-hub`）
+- **演示闭环**：`demo/irrigation_approval.py`（一键起 Broker/模拟器/Hub + 事件流审批人 +
+  拒绝/改参分支 + 真机离线 SIL 兜底），连续 10 次连跑 10/10 通过（工作流均值 5.26s，
+  审批等待 ~3.0s）；`demo/reset.ps1` / `reset.sh` 一键重置
+- **证据与文档**：`docs/测试报告_v3.0.md`（321 项 / 72.1% 行覆盖）、
+  `docs/试错记录.md`、`docs/原创性边界说明.md`、`docs/demo_操作手册.md`；
+  `docs/api.md` v0.6、`docs/unispec.md` v0.4.0、`docs/口径速查表.md` §6.1/§7 同步
+
+### 修复
+- `/mcp` 的 `tools/call` 改到线程池执行：HITL 等待不再阻塞事件循环
+  （否则审批期间 WS 与 `/hitl/decide` 均不可达）
+- `ScriptAgent` 的 `run_workflow` 权限改为透传入参（不再硬编码 write）
+
+### 测试
+- 321 项全部通过（0 失败 / 0 跳过 / 0 错误）；v2.0 收口基线 261，v3.0 批次 +60
+- 测试文件 42 项（41 个 `test_*.py` + 1 个契约文件；unit 268 · integration 46 · adapters 7）
+- 行覆盖率 72.1%（3221 / 4467 statements）
+
+### 文档（材料收口，2026-11-07）
+- **研究报告**：摘要改为评委可读表述（"我设计了 321 个测试…46 个端到端…约七成代码路径，
+  未覆盖 Windows 非 PTY 与界面样式"）；新增 5.10 v3.0 三层控制台实验、6.2 创新点收窄为
+  3 条 + 支撑设计、**八、试错记录**（一次性 subprocess→交互终端等 5 个转折点，带 commit 与测试）；
+  6.3 局限性与 7.2 未来工作同步 v3.0 边界
+- **查新报告**（`docs/查新点与对比文献.md`）：收窄为 2 条创新点；列出 CNKI/万方/维普/
+  IEEE/ACM/arXiv/GitHub/专利检索范围与中英文检索式（公开网络已完成、机构库标注待复核）；
+  逐个对比 Dify / Coze / LangGraph / OpenAI Agents SDK / AutoGen / terminal-mcp / tlive /
+  Agent Flight Recorder / TrustNotch / W3C WoT，结论采用"组合创新"而非"国内外未见"
+- **开发日志**：新增 §17 v3.0 批次（目标边界、模块清单、9 个踩坑与修复、数据、待人工）
+- **六分钟答辩**：新增 `docs/答辩6分钟_排练稿.md`（配时表 + 逐段口播 + 追问 + 故障兜底）；
+  `demo/rehearse_6min.ps1` 技术排练 **3/3 通过**（允许 11.6s / 拒绝 11.1s / 改 60 秒 11.5s）
+- **分支演示**：`--decision rejected` 与 `--decision modify` 均通过；脚本按分支校验
+  （拒绝必须"工具未执行 + 审计 blocked/1003"，改参必须"审计 duration=60"），不再只看退出码
+- **附件三件套**：`docs/附件材料_v3.0.md`（失败时间线 / 10 连跑表 / SIL-HIL 说明）
+- **PRD / roadmap / deployment / demo_script / demo_video_guide**：增补 v3.0 范围、指标、
+  环境变量、端口、6 分钟录制说明；`docs/口径速查表.md` 新增 §8"材料语言转译"
+- 证据包新增 `branch_rejected_and_modify.txt`、`rehearse6_results.txt`、`fallback_and_reset.txt`
+
 ### 新增
 - 开源治理文件：LICENSE（Apache-2.0）/ CONTRIBUTING / SECURITY / 本文件
 - **材料收口批次（2026-10-24 第三批，路线 B）**：研究报告全文统一 261 口径
@@ -60,7 +118,7 @@
   消除与其他文档及实测数据的跨文档冲突
 
 ### 变更
-- 根目录规划类 txt 归档至 `docs/`（开发路线 / 技术栈完善方案）
+- 根目录规划类 txt 归档至 `docs/`（开发路线 / 技术栈完善方案 / LLM 接入评估 / 比赛材料总结）
 - `agent/demo_agent.py` 的仓库 / 搜索目录默认值改为当前工作目录（去除开发机绝对路径）
 - CLI 反向生成 README 与 LLM 探针提示词中的示例路径改为可移植写法
 

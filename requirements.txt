@@ -18,3 +18,8 @@ websockets==15.0.1
 PyJWT==2.15.1
 # Prometheus 指标（v2.0 §3.11；/metrics 端点；软依赖缺失时自动降级为 no-op）
 prometheus-client==0.26.0
+# OTel GenAI SemConv 可观测（v3.0 §2.8；SDK 缺失时 tracer 自动降级为纯本地记录，
+# 字段名 gen_ai.* 语义不变；HUB_OTEL_ENDPOINT 未设置时不发网络包）
+opentelemetry-sdk==1.45.2
+opentelemetry-exporter-otlp==1.45.2
+opentelemetry-instrumentation-fastapi==0.66b2

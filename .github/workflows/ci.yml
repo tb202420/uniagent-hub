@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
       - name: Run tests
-        run: pytest --junitxml=pytest-results.xml
+        run: pytest --junitxml=pytest-results.xml --cov=core --cov=adapters --cov=agent --cov=web --cov-report=term
       - name: Annotate test failures
         if: failure()
         shell: pwsh

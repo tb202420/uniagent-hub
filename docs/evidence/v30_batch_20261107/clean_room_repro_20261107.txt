@@ -1,0 +1,58 @@
+# 干净环境从零复现记录（2026-11-07 · clean-room repro #3）
+
+> 验收目标（7 天规划 §二）：换一台陌生机器，从 `git clone -b v3.0` 开始，
+> 跑出 321 passed / 0 skipped、退出码 0，并跑通三个演示分支。
+> 复现环境：全新目录 C:\ua_repro_clean3（新建 venv，无个人项目缓存）。
+
+## 1. 环境与来源
+
+- 主机：Windows 11（SK-20251015ANNI），Python 3.14.3
+- 源码：**GitHub 实拉** `git clone -b v3.0 https://github.com/tb202420/uniagent-hub.git`
+  （分支 v3.0 = 07e8a27，与 tag `v3.0-three-layer-console` 指向一致，`git ls-remote` 已复核）
+- 隔离：新建虚拟环境 `C:\ua_repro_clean3\venv`（全路径解释器创建，规避 PATH 坏 shim）
+
+## 2. 复现命令与退出码
+
+| 步骤 | 命令 | 退出码 |
+|---|---|---|
+| 1. 克隆 | `git clone -b v3.0 https://github.com/tb202420/uniagent-hub.git` | **0** |
+| 2. 建环境 | `python -m venv .venv` | **0** |
+| 3. 装依赖 | `.venv\Scripts\python.exe -m pip install -r requirements-dev.txt` | **0** |
+| 4. 全量测试 | `.venv\Scripts\python.exe -m pytest -q`（直跑 2 次） | **0 / 0** |
+| 5. 复位 | `powershell -File demo\reset.ps1` | **0** |
+
+## 3. pytest 结果（验收标准核心）
+
+运行 2 次均退出码 0；JUnit 输出（`C:\ua_repro_clean3\src\junit_clean.xml`）：
+
+```
+<testsuite name="pytest" errors="0" failures="0" skipped="0" tests="321"
+           time="60.815" timestamp="2026-11-07T22:44:13+08:00">
+```
+
+- **321 项测试全部通过，0 失败 / 0 错误 / 0 跳过** ✅（与主开发机 `data/pytest-v30.xml` 完全一致）
+- 复现产物：`C:\ua_repro_clean3\`（src 源码 / venv / junit_clean.xml / pytest_clean.txt / repro_result3.txt）
+
+## 4. 三个演示分支（干净 venv 内运行，全部退出码 0）
+
+| 分支 | 退出码 | 审计判定 | 关键证据 |
+|---|---|---|---|
+| 允许（默认） | 0 | `guard_result=passed` / error_code 0 | `agent_ok=true`，arguments duration=300 执行 |
+| 拒绝 `--decision rejected` | 0 | **`blocked` / 1003** | `agent_ok=false`（工具未执行），审批 state=rejected |
+| 改参 `--decision modify` | 0 | `passed` / **arguments duration=60** | `override_args={"action":"on","duration":60}` |
+
+- 三次事件流均 `audit_chain_ok=true`，审批链路哈希校验通过；
+- 设备就绪探针 1.82–1.89s（device_discover），工作流 4.89–5.04s，审批等待 2.91–2.94s，
+  三次运行 stamp 间隔约 10–11s（22:39:10 → 22:39:21 → 22:39:31），落在 10–12s 验收区间。
+
+## 5. 过程说明（一处脚本层问题，与项目无关）
+
+- 首次自动化脚本用 `--junitxml=(Join-Path ...)` 内联写法触发 pytest 用法错误（exit 4）；
+  改用验收原文命令 `python -m pytest -q` 直跑后两次 exit 0，JUnit 单独相对路径生成成功。
+  结论：问题在临时脚本参数写法，**项目本身在干净环境无任何平台差异问题**，
+  无需修改 requirements-dev.txt。
+
+## 6. 结论
+
+规划 §二"从零复现证据链"两项验收在陌生目录 + 全新 venv 下全部达成：
+321 passed / 0 skipped / exit 0，三分支审计语义正确、耗时在 10–12s 区间。

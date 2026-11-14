@@ -1,7 +1,9 @@
-"""UniSpec v0.2.0 — 统一能力描述规范（契约见 docs/unispec.md，已冻结）。
+"""UniSpec v0.4.0 — 统一能力描述规范（契约见 docs/unispec.md）。
 
 Pydantic 模型 + 校验。所有适配器与注册中心共享此模型。
 v0.2.0 新增 capability 扩展字段：stateField / paramPatterns / permissionLevel。
+v0.4.0（v3.0 批次）新增协议绑定字段：version / protocol_bindings /
+control_mechanisms / self_description（均为可选，向后兼容 v0.3.x 描述）。
 """
 
 from __future__ import annotations
@@ -19,6 +21,11 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 ResourceType = Literal["iot_device", "cli_tool", "rest_api", "local_script", "database", "websocket_stream"]
 ProtocolType = Literal["mqtt", "http", "subprocess", "script", "stdio", "sqlite", "websocket"]
 PermissionLevel = Literal["read", "write", "admin"]
+# v0.4.0 协议绑定（AGI 协议栈三层显式映射）
+HardwareSide = Literal["MHS-compatible", "none"]
+AgentAccess = Literal["mcp"]
+InterAgent = Literal["a2a"]
+ControlMechanism = Literal["mcp_tool", "cli", "code_file"]
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]*$")
 _CAP_NAME_PATTERN = re.compile(r"^[a-z][a-zA-Z0-9_]*$")
@@ -98,8 +105,21 @@ class Constraints(BaseModel):
         return n / 1000.0 if unit == "ms" else float(n) if unit == "s" else n * 60.0
 
 
+class ProtocolBindings(BaseModel):
+    """v0.4.0 协议绑定：一个资源在 AGI 协议栈中的三层位置。
+
+    - hardware_side：硬件侧描述协议（MHS 理念落地；非硬件资源为 "none"）
+    - agent_access：Agent 访问通道（当前为 MCP）
+    - inter_agent：Agent 间协同通道（A2A 为 Hub 级最小端点，资源级可选声明）
+    """
+
+    hardware_side: HardwareSide = "none"
+    agent_access: list[AgentAccess] = Field(default_factory=lambda: ["mcp"])
+    inter_agent: list[InterAgent] = Field(default_factory=list)
+
+
 class UniSpec(BaseModel):
-    """UniSpec v0.1 顶层结构（docs/unispec.md §2/§9）。"""
+    """UniSpec v0.4.0 顶层结构（docs/unispec.md §2/§9）。"""
 
     id: str
     type: ResourceType
@@ -109,6 +129,11 @@ class UniSpec(BaseModel):
     endpoint: dict[str, Any] = Field(default_factory=dict)
     capabilities: list[Capability] = Field(min_length=1)
     constraints: Constraints = Field(default_factory=Constraints)
+    # ---- v0.4.0 增量（可选字段，缺省时按下文规则自动派生）----
+    version: str = "0.4.0"
+    protocol_bindings: ProtocolBindings | None = None
+    control_mechanisms: list[ControlMechanism] = Field(default_factory=list)
+    self_description: dict[str, Any] | None = None
 
     @field_validator("id")
     @classmethod
@@ -116,6 +141,33 @@ class UniSpec(BaseModel):
         if not _ID_PATTERN.match(v):
             raise ValueError(f"id 非法: {v!r}（需匹配 {_ID_PATTERN.pattern}）")
         return v
+
+    @field_validator("version")
+    @classmethod
+    def _check_version(cls, v: str) -> str:
+        if not re.match(r"^\d+\.\d+\.\d+$", v):
+            raise ValueError(f"version 非法: {v!r}（需为 x.y.z 形式）")
+        return v
+
+    @model_validator(mode="after")
+    def _derive_v04_fields(self) -> "UniSpec":
+        """v0.4.0 缺省派生：协议绑定按资源类型补齐，控制机制按消费方式补齐。
+
+        向后兼容：v0.3.x 描述未声明这些字段时，模型自动给出可解释的默认值，
+        不要求适配器逐份改写 YAML/JSON。
+        """
+        if self.protocol_bindings is None:
+            self.protocol_bindings = ProtocolBindings(
+                hardware_side=("MHS-compatible" if self.type == "iot_device" else "none"),
+            )
+        if not self.control_mechanisms:
+            if self.type == "cli_tool":
+                self.control_mechanisms = ["mcp_tool", "cli"]
+            elif self.type == "local_script":
+                self.control_mechanisms = ["mcp_tool", "code_file"]
+            else:
+                self.control_mechanisms = ["mcp_tool"]
+        return self
 
     @model_validator(mode="after")
     def _check_multiplicity(self) -> "UniSpec":
@@ -145,6 +197,8 @@ class UniSpec(BaseModel):
 
     def mcp_tools(self) -> list[dict[str, Any]]:
         """生成 MCP Tool 定义列表（tools/list 返回结构）。"""
+        bindings = (self.protocol_bindings.model_dump()
+                    if self.protocol_bindings is not None else {})
         tools = []
         for c in self.capabilities:
             tools.append(
@@ -155,6 +209,15 @@ class UniSpec(BaseModel):
                     "inputSchema": c.inputSchema,
                     "annotations": {
                         "readOnlyHint": c.readOnly or self.constraints.readOnly,
+                    },
+                    # v0.4.0：工具定义携带协议绑定与控制机制（Agent 可自描述发现）
+                    "_meta": {
+                        "unispec": {
+                            "version": self.version,
+                            "resource_type": self.type,
+                            "protocol_bindings": bindings,
+                            "control_mechanisms": list(self.control_mechanisms),
+                        },
                     },
                 }
             )

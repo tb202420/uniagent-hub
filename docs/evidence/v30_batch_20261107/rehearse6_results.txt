@@ -1,0 +1,12 @@
+UniAgent Hub v3.0 六分钟答辩技术排练（2026-11-07，两次实测）
+脚本：demo/rehearse_6min.ps1（每次分支前先 demo/reset.ps1）
+
+第 1 次：approved 11.6s / rejected 11.1s / modify 11.5s → 3/3
+第 2 次：approved 11.7s / rejected 11.5s / modify 11.6s → 3/3
+
+说明：
+- 技术链路（起服务、审批、执行、审计链、退出码）稳定通过；
+  口头演讲排练与录屏为人工项，配时见 docs/答辩6分钟_排练稿.md。
+- 每次约 11.5 秒、三次约 35 秒；允许分支审计 passed，
+  拒绝分支 blocked/1003 且无工具执行，改参分支审计 duration=60。
+- 设备模式为 SIL 模拟器，日志均标注"非真机"。

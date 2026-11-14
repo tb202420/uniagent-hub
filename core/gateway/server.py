@@ -11,14 +11,16 @@ run_workflow 由 WorkflowEngine 提供（每步仍走本 Guard 管道，不旁�
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import secrets
 import uuid
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from core.adapters.plugins import adapter_health
 from core.contracts import (
@@ -26,12 +28,17 @@ from core.contracts import (
     E_TOOL_NOT_FOUND, E_PERMISSION_DENIED, E_RATE_LIMITED,
     E_INVALID_ARGS, E_INJECTION_BLOCKED, E_INTERNAL,
 )
+from core.gateway.event_bus import EventBus, default_bus
 from core.guard.attestation import attestation_report, schema_hash
 from core.guard.audit import AuditLogger, AuditStore, default_logger
+from core.guard.hitl import ApprovalBroker
 from core.guard import metrics as obs
 from core.guard.ratelimit import RateLimiter
 from core.guard.validation import validate_args
+from core.observability.tracer import Tracer, default_tracer
 from core.registry.registry import ToolRegistry
+from core.terminal.tokens import TerminalTokenRegistry, pick_token
+from core.terminal.session import TerminalManager
 
 # 无状态规范版本号（docs/api.md §2.3）
 SUPPORTED_PROTOCOL_VERSIONS = ["2026-07-28", "2025-11-25"]
@@ -46,13 +53,20 @@ class MCPGateway:
                  workflow_engine: Any | None = None,
                  rate_limiter: RateLimiter | None = None,
                  meta_tools: Any | None = None,
-                 auth_enforced: bool | None = None) -> None:
+                 auth_enforced: bool | None = None,
+                 approvals: ApprovalBroker | None = None,
+                 tracer: Tracer | None = None,
+                 bus: EventBus | None = None) -> None:
         self.registry = registry
         self.audit = audit or default_logger
         self.workflow = workflow_engine
         self.rate_limiter = rate_limiter or RateLimiter()
         # 渐进式工具发现（改进方案 §3）：启用后 tools/list 仅返回 4 个元工具
         self.meta_tools = meta_tools
+        # v3.0：HITL 审批闸门 / 追踪记录器 / 事件总线（三视图共享数据源）
+        self.bus = bus or default_bus
+        self.tracer = tracer or default_tracer
+        self.approvals = approvals
         # Bearer Token 鉴权（P0-BE-2）：设置 HUB_API_TOKEN 后 /mcp 需带
         # Authorization: Bearer <token>；未设置时保持本地回路兼容模式。
         # v2.0 §3.6：HUB_AUTH_MODE=jwt 且配置 HUB_JWT_SECRET 时同样强制鉴权。
@@ -90,6 +104,38 @@ class MCPGateway:
              authenticated: bool = False,
              internal: bool = False,
              auth_identity: dict[str, Any] | None = None) -> dict[str, Any]:
+        """对外调用入口：包一层 span + 四阶段事件，再进 Guard 管道。
+
+        v3.0 性能约束：`/mcp` 路由必须把本方法放到线程池执行（run_in_threadpool），
+        否则 HITL 等待会阻塞事件循环，审批/事件流都无法送达前端。
+        """
+        tool_name = params.get("name", "")
+        trace_id = params.get("trace_id") or uuid.uuid4().hex[:8]
+        if not params.get("trace_id"):
+            params = {**params, "trace_id": trace_id}
+        attributes = {
+            "tool.name": tool_name,
+            "tool.caller": params.get("caller", "unknown"),
+            "permission.level": params.get("permission_level", "read"),
+        }
+        handle = self.tracer.start(f"tool.{tool_name}", "tool",
+                                   trace_id=trace_id, attributes=attributes)
+        self.bus.publish("tool.stage", trace_id=trace_id, tool=tool_name,
+                         stage="identified", status="ok")
+        try:
+            resp = self._dispatch(params, authenticated=authenticated,
+                                 internal=internal, auth_identity=auth_identity)
+        except Exception:
+            handle.end("error", {"error": "unhandled exception"})
+            raise
+        handle.end("ok" if not resp.get("isError") else "error",
+                   {"error_code": (resp.get("meta") or {}).get("error_code", 0)})
+        return resp
+
+    def _dispatch(self, params: dict[str, Any], *,
+                  authenticated: bool = False,
+                  internal: bool = False,
+                  auth_identity: dict[str, Any] | None = None) -> dict[str, Any]:
         tool_name = params.get("name", "")
         args = params.get("arguments", {}) or {}
         # trace_id：客户端可作提示，但审计主键冲突风险独立处理（P2-BE-5）
@@ -181,9 +227,46 @@ class MCPGateway:
             return self._finish(ctx, tool_name, args, ToolResult(
                 ok=False, error_code=E_INTERNAL, error_msg=f"资源 {spec.id} 无负责适配器"))
 
+        # v3.0 HITL 审批闸门（冻结边界：只对配置内 write/admin 工具触发；
+        # 只读调用继续自动执行；拒绝/超时复用 1003，不新增错误码）
+        if self.approvals is not None and self.approvals.requires(
+                tool_name, cap, ctx.permission_level):
+            req = self.approvals.request(
+                tool=tool_name, args=norm_args, trace_id=ctx.trace_id,
+                caller=ctx.caller, required_level=required)
+            with self.tracer.start(
+                    "guardrail.approval", "guardrail", trace_id=ctx.trace_id,
+                    attributes={"approval.id": req.id, "tool.name": tool_name}) as span:
+                decision = self.approvals.wait(req)
+                span.set_attribute("approval.decision", decision["decision"])
+                span.set_attribute("approval.waited_ms",
+                                   round((decision.get("decided_ts") or 0)
+                                         - req.created_ts, 3) * 1000)
+            if decision["decision"] not in ("approved", "modify"):
+                return self._finish(ctx, tool_name, args, ToolResult(
+                    ok=False, error_code=E_PERMISSION_DENIED,
+                    error_msg=f"HITL 审批未通过（{decision['decision']}），调用已阻止"))
+            if decision["decision"] == "modify":
+                override = decision.get("override_args") or {}
+                errors = validate_args(cap.inputSchema, override, cap.paramPatterns)
+                if errors:
+                    return self._finish(ctx, tool_name, args, ToolResult(
+                        ok=False, error_code=E_INVALID_ARGS,
+                        error_msg="审批注入参数非法: " + "; ".join(errors)))
+                norm_args = override
+
         # 适配器执行（适配器内部再做参数校验 / 注入防护 / 超时，纵深防御）
+        self.bus.publish("tool.stage", trace_id=ctx.trace_id, tool=tool_name,
+                         stage="executing", status="ok")
         result = owner.call_tool(tool_name, norm_args, ctx)
-        return self._finish(ctx, tool_name, args, result)
+        if not cap.readOnly and ctx.permission_level in ("write", "admin"):
+            # 控制层可视化：写工具实际下发的命令与结果（终端页以注释行展示，
+            # 不伪装成 shell 输入；真机/模拟器差异由 result 本身如实体现）
+            self.bus.publish("terminal.command", trace_id=ctx.trace_id,
+                             tool=tool_name, args=norm_args,
+                             ok=result.ok, latency_ms=result.latency_ms,
+                             error=(result.error_msg or "")[:160])
+        return self._finish(ctx, tool_name, norm_args, result)
 
     # ---- 工作流调用（run_workflow）----
 
@@ -311,6 +394,13 @@ class MCPGateway:
     def _finish(self, ctx: CallContext, tool_name: str, args: dict,
                 result: ToolResult) -> dict[str, Any]:
         guard_result = "blocked" if not result.ok else "passed"
+        # v3.0 四阶段状态条：识别（call 入口）→ 执行中 → 结果 / 错误（本处）
+        self.bus.publish("tool.stage", trace_id=ctx.trace_id, tool=tool_name,
+                         stage=("result" if result.ok else "error"),
+                         status=("ok" if result.ok else "error"),
+                         error_code=result.error_code or 0,
+                         latency_ms=result.latency_ms or 0,
+                         message=(result.error_msg or "")[:200])
         # v2.0 §3.11：可观测埋点（与审计同源；软依赖，未装 prometheus_client 时 no-op）
         obs.observe_call(tool_name, result.ok, result.error_code or 0,
                          result.latency_ms or 0)
@@ -361,13 +451,30 @@ def create_app(registry: ToolRegistry, audit: AuditLogger | None = None,
                workflow_engine: Any | None = None,
                rate_limiter: RateLimiter | None = None,
                gateway: "MCPGateway | None" = None,
-               adapters: list[tuple[str, Any]] | None = None) -> FastAPI:
+               adapters: list[tuple[str, Any]] | None = None,
+               approvals: ApprovalBroker | None = None,
+               terminal_manager: TerminalManager | None = None,
+               token_registry: TerminalTokenRegistry | None = None,
+               a2a: Any | None = None) -> FastAPI:
     """构建 FastAPI 应用。可传预构建 gateway（用于工作流引擎与网关互引）。
 
     adapters：[(名称, 适配器实例)]，提供时 /healthz 汇总各适配器健康状态
     （生命周期回调 on_health_check，改进方案 §4）。
+    v3.0 增量：HITL 审批、终端会话、事件 WS、追踪查询、A2A 最小端点。
     """
     gateway = gateway or MCPGateway(registry, audit, workflow_engine, rate_limiter)
+    bus = gateway.bus
+    tracer = gateway.tracer
+    approvals = approvals or ApprovalBroker(bus=bus, audit=audit)
+    if gateway.approvals is None:
+        gateway.approvals = approvals
+    tokens = token_registry or TerminalTokenRegistry()
+    terminal = terminal_manager or TerminalManager(bus, audit)
+    if a2a is None:
+        from core.a2a.service import A2AService
+        a2a = A2AService(gateway, bus=bus,
+                         self_url=os.environ.get("HUB_SELF_URL",
+                                                 "http://127.0.0.1:8020"))
     app = FastAPI(title="UniAgent Hub Gateway", version="0.3.0")
 
     # P0-BE-2：Bearer Token 鉴权（方案 C）。设置 HUB_API_TOKEN 后，/mcp 与
@@ -380,7 +487,11 @@ def create_app(registry: ToolRegistry, audit: AuditLogger | None = None,
 
     @app.middleware("http")
     async def bearer_auth(request: Request, call_next):
-        protected = request.url.path in ("/mcp", "/workflows/recent", "/workflows/defs")
+        protected = request.url.path in (
+            "/mcp", "/workflows/recent", "/workflows/defs", "/traces",
+            "/events/token", "/terminal/token", "/hitl/decide", "/hitl/pending",
+            "/a2a/tasks", "/a2a/agents", "/agent/run",
+        )
         if not protected:
             return await call_next(request)
         header = request.headers.get("authorization", "")
@@ -466,6 +577,195 @@ def create_app(registry: ToolRegistry, audit: AuditLogger | None = None,
                             status_code=503, media_type="text/plain")
         return Response(body, media_type="text/plain; version=0.0.4")
 
+    @app.post("/events/token")
+    def events_token() -> dict[str, Any]:
+        """事件流单次 token（60s TTL；通过 Sec-WebSocket-Protocol 传递）。"""
+        return {**tokens.issue(purpose="events"),
+                "ws_path": "/ws/events", "protocol_prefix": "ua.events"}
+
+    @app.post("/terminal/token")
+    def terminal_token() -> dict[str, Any]:
+        """终端会话单次 token（60s TTL；不在 URL 暴露）。"""
+        return {**tokens.issue(purpose="terminal"),
+                "ws_path": "/ws/terminal", "protocol_prefix": "ua.terminal"}
+
+    @app.get("/events")
+    def events_poll(since: int = 0, limit: int = 200) -> dict[str, Any]:
+        """事件流 HTTP 轮询兜底（WS 被环境阻断时的降级路径）。"""
+        return {"items": bus.since(since=since, limit=limit)}
+
+    @app.websocket("/ws/events")
+    async def ws_events(ws: WebSocket) -> None:
+        token = pick_token(ws.headers.get("sec-websocket-protocol"), "ua.events")
+        if not tokens.consume(token, "events"):
+            await ws.close(code=1008)
+            return
+        await ws.accept(subprotocol=f"ua.events.{token}")
+        sub = bus.subscribe()
+        try:
+            while True:
+                pending = sub.drain()
+                for event in pending:
+                    await ws.send_json(event)
+                await asyncio.sleep(0.04)
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        finally:
+            bus.unsubscribe(sub)
+
+    @app.websocket("/ws/terminal")
+    async def ws_terminal(ws: WebSocket) -> None:
+        token = pick_token(ws.headers.get("sec-websocket-protocol"), "ua.terminal")
+        if not tokens.consume(token, "terminal"):
+            await ws.close(code=1008)
+            return
+        await ws.accept(subprotocol=f"ua.terminal.{token}")
+        try:
+            session = terminal.create()
+        except RuntimeError as e:
+            await ws.send_json({"kind": "terminal.state", "state": "error",
+                                "reason": str(e)})
+            await ws.close(code=1013)
+            return
+        sub = bus.subscribe()
+        await ws.send_json({"kind": "terminal.state", "session_id": session.id,
+                            "state": "running", "mode": session.mode,
+                            "shell": session.shell[0]})
+        await ws.send_json({"kind": "terminal.output", "session_id": session.id,
+                            "data": (f"\r\n[UniAgent Hub] 会话 {session.id}"
+                                     f" · 模式 {session.mode}"
+                                     f" · shell {session.shell[0]}\r\n")})
+
+        async def pump_output() -> None:
+            while True:
+                for event in sub.drain():
+                    if (event.get("session_id") == session.id
+                            and str(event.get("kind", "")).startswith("terminal.")):
+                        await ws.send_json(event)
+                await asyncio.sleep(0.03)
+
+        async def pump_input() -> None:
+            while True:
+                msg = await ws.receive_json()
+                kind = msg.get("type", "input")
+                if kind == "input":
+                    result = await run_in_threadpool(
+                        session.write, str(msg.get("data", "")))
+                    if not result.get("ok"):
+                        await ws.send_json({"kind": "terminal.state",
+                                            "session_id": session.id,
+                                            "state": "blocked",
+                                            "reason": result.get("reason", "")})
+                elif kind == "resize":
+                    session.resize(int(msg.get("rows", 24)),
+                                   int(msg.get("cols", 80)))
+                elif kind == "close":
+                    return
+
+        tasks = [asyncio.create_task(pump_output()),
+                 asyncio.create_task(pump_input())]
+        try:
+            done, pending = await asyncio.wait(
+                tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        finally:
+            bus.unsubscribe(sub)
+            terminal.close(session.id)
+
+    @app.post("/hitl/decide")
+    def hitl_decide(body: dict[str, Any]) -> Any:
+        approval_id = str(body.get("approval_id") or "")
+        if not approval_id:
+            return JSONResponse({"ok": False, "error": "缺少 approval_id"},
+                                status_code=400)
+        decision = str(body.get("decision") or "")
+        decision = {"approve": "approved", "approved": "approved",
+                    "reject": "rejected", "rejected": "rejected",
+                    "modify": "modify"}.get(decision, decision)
+        try:
+            result = approvals.decide(
+                approval_id, decision,
+                override_args=body.get("override_args"),
+                decided_by=str(body.get("decided_by") or "spa"))
+        except KeyError as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=404)
+        except ValueError as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        return {"ok": True, "approval": result}
+
+    @app.get("/hitl/pending")
+    def hitl_pending() -> dict[str, Any]:
+        return {"items": approvals.pending()}
+
+    @app.get("/traces")
+    def traces(limit: int = 20) -> dict[str, Any]:
+        """最近 trace 列表（span 瀑布图数据源；GenAI SemConv 字段）。"""
+        return {"items": tracer.recent(limit=limit)}
+
+    @app.get("/traces/{trace_id}")
+    def trace_detail(trace_id: str) -> dict[str, Any]:
+        spans = tracer.spans_of(trace_id)
+        return {"trace_id": trace_id, "spans": spans,
+                "otel_available": tracer.otel_available}
+
+    # ---- Agent 插件执行入口（本地/面板触发；工具调用仍走 Guard）----
+
+    @app.post("/agent/run")
+    async def agent_run(body: dict[str, Any]) -> Any:
+        goal = str(body.get("goal") or "").strip()
+        if not goal:
+            return JSONResponse({"ok": False, "error": "goal 不能为空"},
+                                status_code=400)
+        name = str(body.get("agent") or "script")
+        permission = str(body.get("permission") or "read")
+        if permission not in ("read", "write", "admin"):
+            return JSONResponse({"ok": False, "error": "permission 非法"},
+                                status_code=400)
+        trace_id = str(body.get("trace_id") or uuid.uuid4().hex[:8])
+        if name == "script":
+            from agent.plugins.script_agent import ScriptAgent
+            adapter = ScriptAgent()
+            result = await run_in_threadpool(
+                adapter.run, goal,
+                os.environ.get("HUB_SELF_URL", "http://127.0.0.1:8020"),
+                permission, None, stream=True, trace_id=trace_id)
+        else:
+            from agent.plugins.registry import load_agent_plugins
+            adapter = load_agent_plugins().get(name)
+            if adapter is None:
+                return JSONResponse({"ok": False, "error": f"Agent 不存在: {name}"},
+                                    status_code=404)
+            result = await run_in_threadpool(
+                adapter.run, goal,
+                os.environ.get("HUB_SELF_URL", "http://127.0.0.1:8020"),
+                permission, None)
+        return {"trace_id": trace_id, **result}
+
+    # ---- A2A 最小端点（冻结：仅任务委派 + 状态查询）----
+
+    @app.post("/a2a/tasks")
+    def a2a_submit(body: dict[str, Any]) -> Any:
+        try:
+            task = a2a.submit(body)
+        except ValueError as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        return JSONResponse(task, status_code=202)
+
+    @app.get("/a2a/tasks/{task_id}")
+    def a2a_task(task_id: str) -> Any:
+        task = a2a.get(task_id)
+        if task is None:
+            return JSONResponse({"ok": False, "error": "task 不存在"},
+                                status_code=404)
+        return task
+
+    @app.get("/a2a/agents")
+    def a2a_agents() -> dict[str, Any]:
+        return {"agents": a2a.agents()}
+
     @app.post("/mcp")
     async def mcp(request: Request) -> JSONResponse:
         body = await request.json()
@@ -491,13 +791,25 @@ def create_app(registry: ToolRegistry, audit: AuditLogger | None = None,
             # JWT 模式下 auth_identity 为 claims dict（caller/perm/tools 透传裁决）
             identity = getattr(request.state, "auth_identity", None)
             authenticated = bool(identity)
-            result = gateway.call(
-                params, authenticated=authenticated,
+            # v3.0 硬约束：放到线程池执行。HITL 审批会阻塞等待人工决策，
+            # 若在事件循环内调用，事件流与审批端点本身都会被卡死。
+            result = await run_in_threadpool(
+                gateway.call, params, authenticated=authenticated,
                 auth_identity=identity if isinstance(identity, dict) else None)
         else:
             return JSONResponse({"jsonrpc": "2.0", "id": rpc_id,
                                  "error": {"code": -32601, "message": f"方法不存在: {method}"}},
                                 status_code=400)
         return JSONResponse({"jsonrpc": "2.0", "id": rpc_id, "result": result})
+
+    # v3.0 可观测层：FastAPI 自动插桩（OTel SDK 可用时；失败静默降级）
+    if tracer.otel_available and os.environ.get(
+            "HUB_OTEL_INSTRUMENT_HTTP", "1").strip() != "0":
+        try:
+            from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+            FastAPIInstrumentor.instrument_app(
+                app, excluded_urls="/healthz,/metrics,/events,/ws/.*")
+        except Exception:  # noqa: BLE001
+            pass
 
     return app
