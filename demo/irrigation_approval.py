@@ -52,7 +52,9 @@ def _env() -> dict[str, str]:
         "HUB_AUDIT_FILE": str(ROOT / "data" / "demo_irrigation_audit.jsonl"),
         "HUB_AUDIT_CHAIN": "1",
         "HUB_APPROVAL_TOOLS": "control_pump",
-        "HUB_APPROVAL_TIMEOUT": "45",
+        # 手动模式（--manual）录制时可设 $env:HUB_APPROVAL_TIMEOUT='300' 放宽
+        # 等待窗口；自动分支（2s 决策）不受影响。
+        "HUB_APPROVAL_TIMEOUT": os.environ.get("HUB_APPROVAL_TIMEOUT", "45"),
         "HUB_SELF_URL": f"http://127.0.0.1:{HUB_PORT}",
     })
     return env

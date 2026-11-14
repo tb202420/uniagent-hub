@@ -134,7 +134,8 @@ powershell -ExecutionPolicy Bypass -File demo\rehearse_6min.ps1
 | `python` 命令无输出/静默失败 | PATH 上是坏 shim，改用 `.venv\Scripts\python.exe` 全路径 |
 | 审批卡片不出现 | 确认 Hub 版本为 v3.0（`/healthz` 正常）、浏览器已连 `/ws/events` |
 | 终端不可输入 | 控制层默认"Agent 控制"，点右上「接管终端」 |
-| 工作流卡住 | 默认审批超时 90s；演示脚本设 45s，超时会返回 1003 并写审计 |
+| 工作流卡住 | 默认审批超时 90s；演示脚本设 45s，超时会返回 1003 并写审计；手动录制可设 `$env:HUB_APPROVAL_TIMEOUT='300'` 放宽 |
+| SPA / 工作流页无内容 | 演示 Hub 只在运行期间存在：两次运行之间数据端点为空、页面加载慢数秒属正常；审计页读本地 SQLite，运行后仍有记录 |
 
 ---
 
