@@ -352,6 +352,11 @@ def create_dashboard(hub_url: str = "http://127.0.0.1:8000",
     spa_dist = Path(__file__).resolve().parents[2] / "web" / "spa" / "dist"
     if spa_dist.exists():
         from fastapi.staticfiles import StaticFiles
+        # Vite 产物 index.html 用绝对路径 /assets/... 引用 JS/CSS；
+        # 只挂 /spa 会让这些请求 404，页面渲染为空白（实测）。两个路径都挂。
+        assets_dir = spa_dist / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="spa-assets")
         app.mount("/spa", StaticFiles(directory=spa_dist, html=True), name="spa")
 
     return app

@@ -605,7 +605,7 @@ protocol_bindings 作技术储备，不进入演示主线。
 ### 18.1 背景与范围
 
 本批次不加功能，只解决"正式录制前演示不稳定的问题"：把决策来源换成
-**本地 Ollama 模型**（视频规划主演示），并在真实使用中暴露、修复 11 处
+**本地 Ollama 模型**（视频规划主演示），并在真实使用中暴露、修复 12 处
 只在特定路径下才出现的问题（含 2 处脚本/文档配置口径错误）。范围限定：
 `agent/`、`demo/`、`web/audit_dashboard/`、`scripts/demo_start.ps1`、
 `demo/reset.ps1`、`data/record_start.ps1` 与对应文档。
@@ -625,6 +625,7 @@ protocol_bindings 作技术储备，不进入演示主线。
 | 9 | `record_start.ps1` 报 `Missing ')' in function parameter list` / `The string is missing the terminator` | 脚本存成 **UTF-8 无 BOM**，PowerShell 5.1 按 GBK 解析中文，字符串边界错乱 | 转 UTF-8 带 BOM；加 `PSParser` 静态自检；就绪等待 10s→30s 并增加进程存活检测（避免"静默退出无提示"） |
 | 10 | 打开 SPA/工作流页"没有任何显示"（截图只看到"最近工作流执行"标题） | 演示 Hub 只在终端命令运行的那十几秒存在，两次运行之间数据端点为空、代理 5s 超时 | 新增**常驻演示栈**模式：Broker(1884)+温室模拟器+Hub(8021，带审批)+Dashboard(18080) 一次拉起并常驻；`reset.ps1` 支持按 `data/demo_stack.pids` 统一清理 |
 | 11 | 录制讲解时审批卡片 45 秒就超时自动拒绝 | 审批等待窗口硬编码 45s | `HUB_APPROVAL_TIMEOUT` 支持环境变量覆盖（录制建议 300s）；自动分支 2s 决策不受影响 |
+| 12 | 浏览器打开 SPA 一片空白，仅标题栏正常（"没有任何显示"的真正原因） | Vite 产物 `index.html` 用绝对路径 `/assets/...` 引用 JS/CSS，而 dashboard 只把产物挂在 `/spa`：`/assets/*` 全部 404，React 无法加载 | dashboard 同时挂载 `/assets` → `dist/assets`；实测修复前 `/assets/index-*.js` 404、修复后 200，页面正常渲染首页与场景卡 |
 
 ### 18.3 关键代码位置
 
@@ -655,6 +656,12 @@ protocol_bindings 作技术储备，不进入演示主线。
   `1003 timeout`。
 - **回归**：上述每次改动后 `pytest -q` 均为 321 项全过、退出码 0。
 - **Ollama 预热**：冷加载 90.5s，常驻 `ctx=16384`、显存 11.05GB；二次预热 0.4s。
+- **演示视频（2026-11-14 实拍）**：浏览器主链路 48.3s，原始 1920×1080 / 10fps / 7.70MB，
+  压缩到 1440×810 后 **4.33MB（≤6MB）**；画面依次为首页 → 审批卡 → 允许 → 执行完成 →
+  span 瀑布图（control_pump 1452ms / approval 1441ms）→ 审计页（run_workflow、control_pump、
+  hitl.approval 全部 passed）。录制与压缩工具：`data/record_screen.py`、`data/video_check.py`
+  （本机无 ffmpeg，采用 PIL 抓屏 + OpenCV mp4v）；说明见 `demo_fallback/录制说明.txt`。
+  视频为无声屏录，参赛版需本人配音；SIL 画面不得当作 HIL 证据。
 
 ### 18.5 口径与边界（防止误读）
 
