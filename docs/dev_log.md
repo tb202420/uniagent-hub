@@ -597,3 +597,78 @@ protocol_bindings 作技术储备，不进入演示主线。
 - 真机 HIL 复测（本次未重测 152ms/5.1s）；
 - Tauri NSIS 打包与窗口运行；
 - GitHub 已推送（branch `v3.0` + tag `v3.0-three-layer-console`，公开安全快照）；本届申报盖章（人工）。
+
+---
+
+## 十八、演示链路稳定性批次（2026-11-12 ~ 2026-11-14）
+
+### 18.1 背景与范围
+
+本批次不加功能，只解决"正式录制前演示不稳定的问题"：把决策来源换成
+**本地 Ollama 模型**（视频规划主演示），并在真实使用中暴露、修复 11 处
+只在特定路径下才出现的问题（含 2 处脚本/文档配置口径错误）。范围限定：
+`agent/`、`demo/`、`web/audit_dashboard/`、`scripts/demo_start.ps1`、
+`demo/reset.ps1`、`data/record_start.ps1` 与对应文档。
+
+### 18.2 踩坑与修复（按发生顺序）
+
+| # | 现象 | 根因 | 修复 |
+|---|---|---|---|
+| 1 | `ollama list` 报 `bind: An attempt was made to access a socket in a way forbidden by its access permissions` | Windows 把 **11346–11445** 划入排除端口范围（Hyper-V/WinNAT），11434 正在其中 | 用 `OLLAMA_HOST=127.0.0.1:11500` 启动 serve；`llm_agent.py` 预设地址改读 `OLLAMA_BASE`/`LLM_BASE_URL`；`demo_start.ps1` 增 `-OllamaPort` 并统一下发两个环境变量；失败时打印 `netsh int ipv4 show excludedportrange` 排查提示 |
+| 2 | 模型多轮后遗忘目标、重复吐同一工具调用 | 插件未显式设置上下文，Ollama 默认只加载 4096，工具 Schema + 返回值溢出 | `OllamaAgent` 显式 `num_ctx`（默认 16384，与 llm_agent 实测稳定值一致），并透传 `keep_alive` |
+| 3 | 拒绝分支演示如实被拦（1003），但整体仍返回 `ok=True` | 插件只在"模型给出最终回答"时返回，未记录中间工具失败 | 增加 `any_failed` 累计：任一工具步骤失败则整体 `ok=False`，供分支判定复用 |
+| 4 | 演示脚本只能用确定性脚本决策 | 无 `--agent` 参数，`/agent/run` 固定传 `script` | 新增 `--agent {script,ollama}`（默认 script），ollama 模式启动前预检服务可达性并打印所用模型与地址 |
+| 5 | `--manual` 启动即 `SyntaxError: invalid non-printable character U+FEFF` | 前一轮清理行尾时把 `demo/irrigation_approval.py` 写成**开头 6 个重复 BOM** | 剥除全部前导 BOM；全仓扫描 `.py/.md/.ps1` 无同类文件 |
+| 6 | `--manual` 下卡在审批时 Hub 反被拆掉：`/agent/run` 500、`ConnectError`、`no close frame received` | `script_agent` 内部 `httpx.Client(timeout=30)`，小于演示脚本的审批等待 45s——**人工还没点审批，调用先 ReadTimeout**，异常向上打穿整条链路 | 客户端超时改为 `HUB_APPROVAL_TIMEOUT + 30`（默认 90+30）；该缺陷只在真正启用手动审批时才暴露 |
+| 7 | SPA 场景卡片点击后"页面像死了"，审批卡片永远刷不出来 | `/api/run-workflow` 是 `async def`，内部却用**同步 httpx**：等待审批的几十秒把 dashboard 事件循环整个卡死，`/api/hitl/pending` 全部超时 | 改用 `httpx.AsyncClient`；波形证据：修复前 `pending` 请求 3s 超时、修复后同一次运行内正常返回卡片 |
+| 8 | 审批卡片在 SPA 里始终不出现（即使 Hub 正常） | Dashboard 默认 `--hub http://127.0.0.1:8000`，而 v3.0 演示 Hub 在 **8021**；操作手册 §C 曾误写"用 `demo_start.ps1` 起全栈"（那是旧演示 Hub 8020） | 文档与拍摄指南统一改为显式指定 `--hub http://127.0.0.1:8021`，并注明与 `demo_start.ps1` 不可混用 |
+| 9 | `record_start.ps1` 报 `Missing ')' in function parameter list` / `The string is missing the terminator` | 脚本存成 **UTF-8 无 BOM**，PowerShell 5.1 按 GBK 解析中文，字符串边界错乱 | 转 UTF-8 带 BOM；加 `PSParser` 静态自检；就绪等待 10s→30s 并增加进程存活检测（避免"静默退出无提示"） |
+| 10 | 打开 SPA/工作流页"没有任何显示"（截图只看到"最近工作流执行"标题） | 演示 Hub 只在终端命令运行的那十几秒存在，两次运行之间数据端点为空、代理 5s 超时 | 新增**常驻演示栈**模式：Broker(1884)+温室模拟器+Hub(8021，带审批)+Dashboard(18080) 一次拉起并常驻；`reset.ps1` 支持按 `data/demo_stack.pids` 统一清理 |
+| 11 | 录制讲解时审批卡片 45 秒就超时自动拒绝 | 审批等待窗口硬编码 45s | `HUB_APPROVAL_TIMEOUT` 支持环境变量覆盖（录制建议 300s）；自动分支 2s 决策不受影响 |
+
+### 18.3 关键代码位置
+
+| 文件 | 变更 |
+|---|---|
+| `agent/llm_agent.py` | Ollama 预设地址支持 `OLLAMA_BASE`/`LLM_BASE_URL`（端口被系统排除时可切换） |
+| `agent/plugins/ollama_agent.py` | num_ctx（16384）/ keep_alive 透传；工具失败累计为整体 `ok=False` |
+| `agent/plugins/script_agent.py` | 客户端超时 = `HUB_APPROVAL_TIMEOUT + 30`，修复手动审批超时打穿链路 |
+| `demo/irrigation_approval.py` | 新增 `--agent {script,ollama}` 与 Ollama 预检；`HUB_APPROVAL_TIMEOUT` 可覆盖；剥离重复 BOM |
+| `web/audit_dashboard/app.py` | `/api/run-workflow` 改 `httpx.AsyncClient`，避免审批等待阻塞事件循环 |
+| `scripts/demo_start.ps1` | 新增 `-OllamaPort`，统一下发 `OLLAMA_BASE`/`LLM_BASE_URL`，失败给出排除端口排查提示 |
+| `demo/reset.ps1` | 支持清理常驻演示栈（`data/demo_stack.pids`） |
+| `data/record_start.ps1` | 录制用常驻栈一键启动（UTF-8 BOM + 解析自检 + 进程存活检测） |
+| `docs/demo_操作手册.md` / `docs/demo_video_guide.md` / `docs/附件二_辅助图片拍摄指南.txt` | 修正 Hub 端口口径（8021）、手动审批与超时说明、页面空白排错 |
+
+### 18.4 验证数据（本批次实测）
+
+- **本地 Ollama 三分支 + 真机兜底**（2026-11-12，SIL）：允许 12.659s、改 60 秒 15.041s
+  （审计 `duration=60`）、拒绝 12.107s（审计 `blocked/1003`、工具未执行）、
+  `--real --device-timeout 4` 10.326s（打印"已切换模拟设备（SIL 兜底）"）；
+  模型总结均如实复述工具返回值（如土壤 24.2%）。
+- **手动审批全链路**（2026-11-14，Dashboard 代理）：`/api/hitl/pending` 出现卡片 →
+  `/api/hitl/decide` 返回 `ok=True` → 水泵回执 100ms → 审计 `passed` → 审计链 `ok`；
+  人工等待 15.892s 时工作流总耗时 17.907s（相等部分即审批等待，非性能退化）。
+- **SPA 场景流**（修复 #7 后）：`/api/run-workflow` 运行期间卡片可查、决策成功、
+  返回 `ok=true` 且 `latency_ms=100`；`/workflows` 页出现 `smart_irrigation · ok=True`；
+  `/api/audit/verify` 返回 `ok`。修复前同一条路径 `pending` 请求 3s 超时、场景最终
+  `1003 timeout`。
+- **回归**：上述每次改动后 `pytest -q` 均为 321 项全过、退出码 0。
+- **Ollama 预热**：冷加载 90.5s，常驻 `ctx=16384`、显存 11.05GB；二次预热 0.4s。
+
+### 18.5 口径与边界（防止误读）
+
+- **审批超时返回 `blocked/1003` 不是缺陷**：这是设计内的防呆——无人决策即拒绝执行；
+  录制时用 `HUB_APPROVAL_TIMEOUT=300` 放宽等待窗口，不要把它讲成"系统不稳定"。
+- **两套端口不可混用**：v3.0 演示 Hub = 8021（`demo.irrigation_approval` 与常驻栈）；
+  旧版 `demo_start.ps1` = 8020（office_cooling 演示）。Dashboard 必须指向当前用的那一个。
+- **Ollama 决策耗时口径独立**：三分支 10.3–15.0s（含模型推理），与 script 10 连跑
+  10.8–11.1s 是两个定义，材料中禁止混用（见 `docs/口径映射表.md` §2b）。
+- **`fork` 类进程回收**：本机 CLI 环境会回收分离进程；在自己的终端窗口运行
+  `data/record_start.ps1` 时四个服务正常常驻（已实测端口与端点）。
+
+### 18.6 待人工
+
+- 按 `docs/附件二_辅助图片拍摄指南.txt` 实拍 5 张关键帧（真实截图，不用生成图）；
+- 2 分钟演示视频录制（本地 Ollama 主线 + 拒绝/改参分支，≤6MB）；
+- 现场投影分辨率下目视审批卡片与瀑布图（1024×768 / 720p）。
