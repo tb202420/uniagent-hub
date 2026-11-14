@@ -13,6 +13,17 @@ if (Test-Path $runDir) {
   }
 }
 
+# 常驻演示栈（record_start.ps1 启动的 broker/sim/hub/dashboard）
+$stack = Join-Path $root 'data\demo_stack.pids'
+if (Test-Path $stack) {
+  Get-Content $stack | ForEach-Object {
+    $procId = $_.Trim()
+    if ($procId) { Stop-Process -Id ([int]$procId) -Force -ErrorAction SilentlyContinue }
+  }
+  Remove-Item $stack -Force -ErrorAction SilentlyContinue
+  Write-Host '[reset] 常驻演示栈已停止'
+}
+
 Get-ChildItem (Join-Path $root 'data') -Filter 'demo_irrigation.db*' -ErrorAction SilentlyContinue |
   Remove-Item -Force -ErrorAction SilentlyContinue
 Remove-Item (Join-Path $root 'data\demo_irrigation_audit.jsonl') -Force -ErrorAction SilentlyContinue

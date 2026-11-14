@@ -157,7 +157,12 @@ def create_dashboard(hub_url: str = "http://127.0.0.1:8000",
 
     @app.post("/api/run-workflow")
     async def api_run_workflow(body: dict) -> dict:
-        """简易模式一键场景：代理 run_workflow（写操作，前端已做确认卡片）。"""
+        """简易模式一键场景：代理 run_workflow（写操作，前端已做确认卡片）。
+
+        必须用异步客户端：run_workflow 遇到 HITL 审批会阻塞等待人工决策，
+        同步 httpx 调用会把事件循环卡死——审批卡片接口（/api/hitl/pending）
+        在场景运行期间全部超时不可达（实测复现）。
+        """
         payload = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                    "params": {"name": "run_workflow",
                               "arguments": {"workflow": body.get("workflow", ""),
@@ -168,8 +173,9 @@ def create_dashboard(hub_url: str = "http://127.0.0.1:8000",
         try:
             # HITL 审批会暂停工作流等待人工决策（默认上限 90s），
             # 代理超时须大于审批上限，否则前端会先看到超时而错过审批结果。
-            resp = httpx.post(f"{hub}/mcp", json=payload, timeout=130,
-                              headers=_hub_headers())
+            async with httpx.AsyncClient(timeout=130,
+                                         headers=_hub_headers()) as client:
+                resp = await client.post(f"{hub}/mcp", json=payload)
             return resp.json().get("result", {})
         except Exception as e:  # noqa: BLE001
             return {"isError": True,
