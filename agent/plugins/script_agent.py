@@ -104,7 +104,11 @@ class ScriptAgent(AgentAdapter):
         headers = _hub_headers()
         if stream:
             self._stream_narration(plan, trace_id)
-        with httpx.Client(timeout=30, headers=headers) as c:
+        # 手动审批（HITL）会阻塞 run_workflow 等待人工决策：客户端超时必须
+        # 大于 Hub 的审批超时（HUB_APPROVAL_TIMEOUT，默认 90s），否则人工还没
+        # 点审批，调用就先 ReadTimeout（--manual 模式实测暴露的 bug）。
+        approval_timeout = float(os.environ.get("HUB_APPROVAL_TIMEOUT", "90"))
+        with httpx.Client(timeout=approval_timeout + 30, headers=headers) as c:
             if plan["kind"] == "workflow":
                 if cancel and cancel.is_set():
                     return {"ok": False, "plan": plan, "steps": [],

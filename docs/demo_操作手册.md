@@ -70,12 +70,17 @@ $env:OLLAMA_BASE = 'http://127.0.0.1:11500'
 ## C. 手动演示（评委自己点审批）
 
 ```powershell
-# 终端 A：一键起全栈（Hub 8020 + Dashboard 18080 + 模拟器）
-powershell -ExecutionPolicy Bypass -File scripts\demo_start.ps1
+# 终端 A：Dashboard 常驻（必须指向演示 Hub 8021，否则审批卡片不会出现在 SPA 里）
+$env:HUB_AUDIT_FILE = 'data\demo_irrigation_audit.jsonl'
+.\.venv\Scripts\python.exe -m web.audit_dashboard --hub http://127.0.0.1:8021 --port 18080 --db data\demo_irrigation.db
 
 # 终端 B：手动模式（脚本不自动审批，等你在 SPA 里点）
 .\.venv\Scripts\python.exe -m demo.irrigation_approval --manual
 ```
+
+> 注意：一键全栈 `scripts\demo_start.ps1` 起的是旧演示（Hub 8020），与本节的 v3.0 演示（Hub 8021）
+> 不是同一个 Hub——**不要混用**。Broker/模拟器/Hub 由演示脚本每次运行时自动拉起。
+> 也可直接用一键脚本 `powershell -ExecutionPolicy Bypass -File data\record_start.ps1`（含预热与命令清单）。
 
 打开 `http://127.0.0.1:18080/spa/`：
 
